@@ -52,8 +52,16 @@ echo "Docker build/up (bir necha daqiqa)..."
 docker compose -f docker-compose.saxar-prod.yml --env-file .env.saxar pull || true
 docker compose -f docker-compose.saxar-prod.yml --env-file .env.saxar up -d --build
 
+echo "API tayyor bo'lishini kutamiz (migratsiya + gunicorn)..."
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+  if curl -fsS --max-time 3 "http://127.0.0.1:18181/api/health/" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 2
+done
+
 echo "Health (ichki):"
-curl -fsS "http://127.0.0.1:18181/api/health/" | head -c 400 || true
+curl -fsS "http://127.0.0.1:18181/api/health/" | head -c 400 || echo "(API javob bermadi — docker compose logs api)"
 echo ""
 
 NGINX_AVAILABLE=0
@@ -80,15 +88,22 @@ if [[ "$NGINX_AVAILABLE" -eq 1 ]]; then
       --email "$SAXAR_CERTBOT_EMAIL" -d api.saxar.uz
     C2=$?
     set -e
-    if [[ $C1 -eq 0 && $C2 -eq 0 ]]; then
+    # Har bir domen alohida: saxar.uz SSL bo'lsa — asosiy sayt HTTPS; api DNS bo'lmasa — API HTTP 80 da qoladi
+    if [[ $C1 -eq 0 ]]; then
       cp "$INSTALL_ROOT/deploy/host-nginx/saxar.uz.conf" /etc/nginx/sites-available/saxar.uz.conf
-      cp "$INSTALL_ROOT/deploy/host-nginx/api.saxar.uz.conf" /etc/nginx/sites-available/api.saxar.uz.conf
-      echo "SSL nginx konfiglari o'rnatildi."
-      nginx -t
-      systemctl reload nginx 2>/dev/null || service nginx reload 2>/dev/null || nginx -s reload
+      echo "saxar.uz uchun SSL nginx o'rnatildi."
     else
-      echo "OGOH: certbot muvaffaqiyatsiz (DNS yoki limit). HTTP (80) saxar konfiglari qoldi."
+      echo "OGOH: saxar.uz uchun certbot muvaffaqiyatsiz — saxar HTTP 80."
     fi
+    if [[ $C2 -eq 0 ]]; then
+      cp "$INSTALL_ROOT/deploy/host-nginx/api.saxar.uz.conf" /etc/nginx/sites-available/api.saxar.uz.conf
+      echo "api.saxar.uz uchun SSL nginx o'rnatildi."
+    else
+      cp "$INSTALL_ROOT/deploy/host-nginx/api.saxar.uz.http-only.conf" /etc/nginx/sites-available/api.saxar.uz.conf
+      echo "OGOH: api.saxar.uz uchun certbot muvaffaqiyatsiz (odatda DNS A yozuvi yo'q). api HTTP 80. DNS qo'shgach qayta: bash deploy/remote_bootstrap.sh"
+    fi
+    nginx -t
+    systemctl reload nginx 2>/dev/null || service nginx reload 2>/dev/null || nginx -s reload
   fi
 
   echo "Nginx holati yangilandi."

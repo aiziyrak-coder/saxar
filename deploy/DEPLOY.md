@@ -11,7 +11,7 @@ Bu yo‘riqnoma **mavjud nginx saytlariga tegmaydi**: faqat `sites-available` / 
 
 - `A` yozuv: `saxar.uz` → server IP  
 - `A` yozuv: `www.saxar.uz` → server IP (ixtiyoriy)  
-- `A` yozuv: `api.saxar.uz` → server IP  
+- `A` yozuv: `api.saxar.uz` → server IP (**yo‘q bo‘lsa**, frontend `.env.saxar` da `VITE_PUBLIC_API_URL=/api` qoling — API so‘rovlari `https://saxar.uz/api/...` orqali ishlaydi; `remote_bootstrap.sh` saxar uchun SSLni alohida qo‘llaydi)  
 
 ## 2) Serverda papka va kod
 
