@@ -44,8 +44,16 @@ pw = secrets.token_urlsafe(24)
 sk = secrets.token_urlsafe(48)
 text = ex.replace("REPLACE_WITH_STRONG_PASSWORD", pw).replace("REPLACE_WITH_LONG_RANDOM_SECRET", sk)
 (root / ".env.saxar").write_text(text, encoding="utf-8")
-print("Yaratildi: .env.saxar (tasodifiy parollar)")
+    print("Yaratildi: .env.saxar (tasodifiy parollar)")
 PY
+fi
+
+# Eski .env: api.saxar.uz DNS yo'q bo'lsa brauzer ERR_NAME_NOT_RESOLVED beradi — bir domen /api
+if [[ -f .env.saxar ]] && grep -qE '^VITE_PUBLIC_API_URL=https://api\.saxar\.uz' .env.saxar 2>/dev/null; then
+  if ! getent hosts api.saxar.uz >/dev/null 2>&1; then
+    sed -i.bak 's|^VITE_PUBLIC_API_URL=https://api.saxar.uz/api|VITE_PUBLIC_API_URL=/api|' .env.saxar || true
+    echo "Tuzatildi: VITE_PUBLIC_API_URL=/api (api.saxar.uz DNS yo'q)."
+  fi
 fi
 
 echo "Docker build/up (bir necha daqiqa)..."
