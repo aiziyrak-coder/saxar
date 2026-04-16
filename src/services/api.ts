@@ -9,7 +9,7 @@ const REQUEST_TIMEOUT_MS = 30_000;
 
 /**
  * Build vaqtidagi VITE_API_URL: `/api` (tavsiya) yoki to'liq `https://api.saxar.uz/api`.
- * Noto'g'ri qiymatlar (`api`, `https://api`) brauzerda `https://api/api/...` kabi xato URL beradi — /api ga tushiramiz.
+ * Noto'g'ri qiymatlar (`https://api`, `https://api/api`) brauzerda DNS xatosi beradi — pathname bo'yicha /api ga qaytaramiz.
  */
 export function normalizeApiBaseUrl(raw: unknown): string {
   const fallback = '/api';
@@ -21,8 +21,12 @@ export function normalizeApiBaseUrl(raw: unknown): string {
   if (/^https?:\/\//i.test(s)) {
     try {
       const u = new URL(s);
-      // "https://api/..." — TLD yo'q, Docker ichidagi servis nomi bilan aralashgan
+      // "https://api/..." yoki "https://api/api" — host nomi "api" (TLD yo'q)
       if (u.hostname === 'api') {
+        const path = (u.pathname || '/').replace(/\/+$/, '') || '/';
+        if (path !== '/' && path.startsWith('/api')) {
+          return `${path}${u.search}`;
+        }
         return fallback;
       }
     } catch {
@@ -36,6 +40,24 @@ export function normalizeApiBaseUrl(raw: unknown): string {
   }
 
   return s;
+}
+
+/**
+ * Eski bundle / noto'g'ri env: fetch("https://api/api/...") → joriy domen ostidagi xuddi shu path.
+ * Haqiqiy `https://api.saxar.uz/...` ga tegmaydi (hostname nuqta bilan).
+ */
+export function coerceBrowserFetchUrl(url: string): string {
+  if (typeof window === 'undefined') return url;
+  if (!/^https?:\/\//i.test(url)) return url;
+  try {
+    const u = new URL(url);
+    if (u.hostname === 'api') {
+      return `${window.location.origin}${u.pathname}${u.search}${u.hash}`;
+    }
+  } catch {
+    return url;
+  }
+  return url;
 }
 
 /** Vite devda odatda `/api` — `vite.config.ts` proxy orqali Django ga yo'naltiriladi */
@@ -74,6 +96,8 @@ class ApiService {
         url += `?${queryString}`;
       }
     }
+
+    url = coerceBrowserFetchUrl(url);
 
     // Default headers
     const headers: Record<string, string> = {

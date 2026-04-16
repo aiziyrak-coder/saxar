@@ -120,3 +120,19 @@ python deploy/deploy_remote.py
 ```
 
 Skript `deploy/remote_bootstrap.sh` ni serverga yuklab, `/opt/saxar` da `git pull`, Docker va nginx (faqat saxar) qadamini bajaradi.
+
+## 9) `api.saxar.uz` ni to‘liq ishlatish (HTTPS + frontend)
+
+1. DNS: `api.saxar.uz` uchun **A** yozuvi server IP ga qarab tursin (tekshiruv: `dig +short api.saxar.uz`).
+2. `/opt/saxar/.env.saxar` da:
+   - `VITE_PUBLIC_API_URL=https://api.saxar.uz/api`
+   - `DJANGO_ALLOWED_HOSTS` qatorida `api.saxar.uz` bo‘lsin (`.env.saxar.example` dagidek).
+   - `CORS_ALLOWED_ORIGINS` va `DJANGO_CSRF_TRUSTED_ORIGINS` da `https://saxar.uz` va `https://api.saxar.uz` bo‘lsin.
+3. `export SAXAR_CERTBOT_EMAIL=...` va `bash deploy/remote_bootstrap.sh` — certbot `api.saxar.uz` uchun sert olgach, nginx SSL bloki qo‘llanadi.
+4. Frontend qayta yig‘iladi: `docker compose -f docker-compose.saxar-prod.yml --env-file .env.saxar up -d --build web`.
+
+**Bitta domen (`saxar.uz` orqali `/api`)** ishlatilsa, DNS talab qilinmaydi; `VITE_PUBLIC_API_URL=/api` qoldiring.
+
+## 10) Firebase (kirish xatolari `YOUR_WEB_API_KEY`)
+
+Repoda maxfiy kalit yo‘q. Serverda `/opt/saxar/firebase-applet-config.json` faylini Firebase konsoldan olingan haqiqiy JSON bilan yarating (`.gitignore` da), keyin `docker compose ... up -d --build web` — Dockerfile bu fayl bor bo‘lsa, misol konfigni **nusxalamaydi**.

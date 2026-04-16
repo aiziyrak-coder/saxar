@@ -3,7 +3,7 @@
  * Ensures data consistency across both systems
  */
 
-import { API_BASE_URL } from './api';
+import { API_BASE_URL, coerceBrowserFetchUrl } from './api';
 import { logger } from './logger';
 
 interface SyncConfig {
@@ -70,7 +70,7 @@ class SyncService {
 
   private async syncToBackend(item: typeof this.syncQueue[0]): Promise<void> {
     const base = API_BASE_URL.replace(/\/+$/, '');
-    const endpoint = `${base}/${item.collection}/${item.id}`;
+    const endpoint = coerceBrowserFetchUrl(`${base}/${item.collection}/${item.id}`);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
@@ -175,7 +175,7 @@ class SyncService {
     const base = API_BASE_URL.replace(/\/+$/, '');
 
     try {
-      const response = await fetch(`${base}/health/`, {
+      const response = await fetch(coerceBrowserFetchUrl(`${base}/health/`), {
         method: 'GET',
         signal: AbortSignal.timeout(5000),
       });
