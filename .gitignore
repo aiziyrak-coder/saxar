@@ -19,3 +19,7 @@ backend/staticfiles/
 
 # Mahalliy Firebase applet kaliti (nusxa: firebase-applet-config.example.json)
 firebase-applet-config.json
+
+# Mahalliy SSH deploy (paramiko)
+.deploy_password
+.saxar_ssh

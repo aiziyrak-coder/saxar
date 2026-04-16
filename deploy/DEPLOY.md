@@ -95,3 +95,28 @@ git push -u origin main
 ```
 
 Autentifikatsiya so‘ralsa — GitHub **PAT** yoki `gh auth login` / SSH kalit ishlating.
+
+## 8) Mahalliy mashinadan Paramiko (avtomatik deploy)
+
+Parolni repoga yozmang. Bir martalik PowerShell (parolni o‘zingiz qo‘ying):
+
+```powershell
+cd D:\SaharERP
+pip install -r deploy/requirements-deploy.txt
+$env:SAXAR_SSH_HOST = "167.71.53.238"
+$env:SAXAR_SSH_USER = "root"
+$env:SAXAR_SSH_PASSWORD = "BU_YERGA_PAROL"
+# SSL uchun (ixtiyoriy; bo‘lmasa HTTP 80 qoladi):
+$env:SAXAR_CERTBOT_EMAIL = "sizning@email.uz"
+python deploy/deploy_remote.py
+```
+
+Parolni faylda saqlash (`.saxar_ssh` — `.gitignore` da):
+
+```powershell
+Set-Content -Path "$env:USERPROFILE\.saxar_ssh" -Value "PAROL" -NoNewline
+$env:SAXAR_SSH_PASSWORD_FILE = "$env:USERPROFILE\.saxar_ssh"
+python deploy/deploy_remote.py
+```
+
+Skript `deploy/remote_bootstrap.sh` ni serverga yuklab, `/opt/saxar` da `git pull`, Docker va nginx (faqat saxar) qadamini bajaradi.
