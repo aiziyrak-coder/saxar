@@ -48,11 +48,19 @@ text = ex.replace("REPLACE_WITH_STRONG_PASSWORD", pw).replace("REPLACE_WITH_LONG
 PY
 fi
 
-# Eski .env: api.saxar.uz DNS yo'q bo'lsa brauzer ERR_NAME_NOT_RESOLVED beradi — bir domen /api
-if [[ -f .env.saxar ]] && grep -qE '^VITE_PUBLIC_API_URL=https://api\.saxar\.uz' .env.saxar 2>/dev/null; then
-  if ! getent hosts api.saxar.uz >/dev/null 2>&1; then
+# Eski .env: noto'g'ri VITE — brauzerda https://api/api/... yoki ERR_NAME_NOT_RESOLVED
+if [[ -f .env.saxar ]]; then
+  if grep -qE '^VITE_PUBLIC_API_URL=https://api\.saxar\.uz' .env.saxar 2>/dev/null && ! getent hosts api.saxar.uz >/dev/null 2>&1; then
     sed -i.bak 's|^VITE_PUBLIC_API_URL=https://api.saxar.uz/api|VITE_PUBLIC_API_URL=/api|' .env.saxar || true
     echo "Tuzatildi: VITE_PUBLIC_API_URL=/api (api.saxar.uz DNS yo'q)."
+  fi
+  if grep -qE '^VITE_PUBLIC_API_URL=https://api$' .env.saxar 2>/dev/null; then
+    sed -i.bak2 's|^VITE_PUBLIC_API_URL=https://api$|VITE_PUBLIC_API_URL=/api|' .env.saxar || true
+    echo "Tuzatildi: VITE_PUBLIC_API_URL=/api (noto'g'ri https://api)."
+  fi
+  if grep -qE '^VITE_PUBLIC_API_URL=api$' .env.saxar 2>/dev/null; then
+    sed -i.bak3 's|^VITE_PUBLIC_API_URL=api$|VITE_PUBLIC_API_URL=/api|' .env.saxar || true
+    echo "Tuzatildi: VITE_PUBLIC_API_URL=/api (faqat 'api' yozilgan edi)."
   fi
 fi
 

@@ -7,9 +7,35 @@ import { logger } from './logger';
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
-function normalizeApiBaseUrl(raw: unknown): string {
-  const s = typeof raw === 'string' && raw.trim() ? raw.trim() : '/api';
-  return s.replace(/\/+$/, '') || '/api';
+/**
+ * Build vaqtidagi VITE_API_URL: `/api` (tavsiya) yoki to'liq `https://api.saxar.uz/api`.
+ * Noto'g'ri qiymatlar (`api`, `https://api`) brauzerda `https://api/api/...` kabi xato URL beradi — /api ga tushiramiz.
+ */
+export function normalizeApiBaseUrl(raw: unknown): string {
+  const fallback = '/api';
+  const t = typeof raw === 'string' && raw.trim() ? raw.trim() : '';
+  if (!t) return fallback;
+
+  let s = t.replace(/\/+$/, '') || fallback;
+
+  if (/^https?:\/\//i.test(s)) {
+    try {
+      const u = new URL(s);
+      // "https://api/..." — TLD yo'q, Docker ichidagi servis nomi bilan aralashgan
+      if (u.hostname === 'api') {
+        return fallback;
+      }
+    } catch {
+      return fallback;
+    }
+    return s;
+  }
+
+  if (!s.startsWith('/')) {
+    return `/${s}`;
+  }
+
+  return s;
 }
 
 /** Vite devda odatda `/api` — `vite.config.ts` proxy orqali Django ga yo'naltiriladi */

@@ -3,6 +3,7 @@
  * Ensures data consistency across both systems
  */
 
+import { API_BASE_URL } from './api';
 import { logger } from './logger';
 
 interface SyncConfig {
@@ -68,8 +69,8 @@ class SyncService {
   }
 
   private async syncToBackend(item: typeof this.syncQueue[0]): Promise<void> {
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
-    const endpoint = `${apiUrl}/${item.collection}/${item.id}`;
+    const base = API_BASE_URL.replace(/\/+$/, '');
+    const endpoint = `${base}/${item.collection}/${item.id}`;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
@@ -171,10 +172,10 @@ class SyncService {
 
   // Health check for backend connectivity
   async checkBackendHealth(): Promise<boolean> {
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+    const base = API_BASE_URL.replace(/\/+$/, '');
 
     try {
-      const response = await fetch(`${apiUrl}/health/`, {
+      const response = await fetch(`${base}/health/`, {
         method: 'GET',
         signal: AbortSignal.timeout(5000),
       });
