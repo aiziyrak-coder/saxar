@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.urls import path, include
+from django.views.generic import RedirectView
 from rest_framework.routers import DefaultRouter
 
 from core.views import health_check
@@ -17,6 +18,8 @@ router.register(r"payments", PaymentViewSet, basename="payment")
 router.register(r"expenses", ExpenseViewSet, basename="expense")
 
 urlpatterns = [
+    # api.saxar.uz/ kabi ildiz so'rovlari — marshrutlar /api/ ostida
+    path("", RedirectView.as_view(url="/api/", permanent=False)),
     path("admin/", admin.site.urls),
     path("api/health/", health_check),
     path("api/accounts/", include("accounts.urls")),
