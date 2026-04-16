@@ -63,7 +63,6 @@ def _stream_exec(client: paramiko.SSHClient, command: str, timeout_sec: int = 36
             chunk = chan.recv(4096)
             sys.stdout.buffer.write(chunk)
             sys.stdout.buffer.flush()
-            buf += chunk
         if chan.recv_stderr_ready():
             chunk = chan.recv_stderr(4096)
             sys.stderr.buffer.write(chunk)

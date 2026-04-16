@@ -81,6 +81,15 @@ git pull
 docker compose -f docker-compose.saxar-prod.yml --env-file .env.saxar up -d --build
 ```
 
+Backend (API) ishlayotganini tekshirish:
+
+```bash
+docker compose -f docker-compose.saxar-prod.yml --env-file .env.saxar ps
+curl -sS http://127.0.0.1:18181/api/health/
+```
+
+`saxar.uz` uchun host nginx repoda yangilangan bo‘lsa (masalan `/api/` endi to‘g‘ridan-to‘g‘ri `18181` ga), faylni qayta nusxalab `nginx -t` va `reload` qiling — `remote_bootstrap.sh` buni avtomatik qiladi.
+
 ## GitHub — mahalliy mashinadan push
 
 Loyiha ildizida:
