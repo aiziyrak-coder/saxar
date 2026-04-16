@@ -1,0 +1,16 @@
+node_modules
+dist
+coverage
+.git
+.cursor
+**/__pycache__
+*.pyc
+backend/venv
+backend/.venv
+backend/db.sqlite3
+*.log
+.env
+.env.*
+!.env.example
+!.env.docker.example
+terminals

@@ -1,0 +1,21 @@
+node_modules/
+build/
+dist/
+coverage/
+
+# Django
+backend/db.sqlite3
+backend/**/__pycache__/
+backend/**/*.pyc
+backend/venv/
+backend/.venv/
+backend/staticfiles/
+.DS_Store
+*.log
+.env*
+!.env.example
+!.env.docker.example
+!.env.saxar.example
+
+# Mahalliy Firebase applet kaliti (nusxa: firebase-applet-config.example.json)
+firebase-applet-config.json

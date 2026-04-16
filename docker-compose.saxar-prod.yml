@@ -1,0 +1,69 @@
+# SaxarERP production: faqat localhost portlarida eshitadi — boshqa dasturlar bilan
+# port to'qnashuvi bo'lmasligi uchun. Tashqi HTTPS: serverdagi asosiy nginx
+# (deploy/host-nginx/*.conf) 127.0.0.1:18180 (frontend) va :18181 (API) ga proksi qiladi.
+#
+# Ishlatish (serverda, loyiha ildizida):
+#   cp .env.saxar.example .env.saxar   # to'ldiring
+#   docker compose -f docker-compose.saxar-prod.yml --env-file .env.saxar up -d --build
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-saxar}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-saxar}
+    volumes:
+      - saxar_pgdata_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - saxar_internal
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-0}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-api.saxar.uz,localhost,127.0.0.1,api}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+      DJANGO_BEHIND_PROXY: ${DJANGO_BEHIND_PROXY:-1}
+      DJANGO_HEALTH_CHECK_DB: ${DJANGO_HEALTH_CHECK_DB:-1}
+      DJANGO_SECURE_SSL: ${DJANGO_SECURE_SSL:-1}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:18181:8000"
+    networks:
+      - saxar_internal
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        VITE_API_URL: ${VITE_PUBLIC_API_URL:-https://api.saxar.uz/api}
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "127.0.0.1:18180:80"
+    networks:
+      - saxar_internal
+
+volumes:
+  saxar_pgdata_prod:
+
+networks:
+  saxar_internal:
+    name: saxar_internal_prod

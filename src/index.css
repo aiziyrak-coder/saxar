@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --app-bg: 246 255 249; /* #f6fff9 */
+    --card-bg: 255 255 255;
+    --card-border: 52 211 153; /* emerald-500 */
+    --text: 15 23 42; /* slate-900 */
+    --muted: 71 85 105; /* slate-600 */
+    --accent: 16 185 129; /* emerald-500 */
+  }
+
+  body {
+    background: rgb(var(--app-bg));
+    color: rgb(var(--text));
+  }
+}
+
+/* Note:
+   Dark Tailwind classes should be removed from UI components.
+   We don't keep emergency overrides here so the theme stays consistent. */

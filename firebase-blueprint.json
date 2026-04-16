@@ -1,0 +1,135 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the FoodERP Pro system (Admin, B2B, Agent, Driver).",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["admin", "b2b", "agent", "driver"] },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role", "name", "createdAt"]
+    },
+    "Client": {
+      "title": "Client",
+      "description": "A B2B client or shop.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "inn": { "type": "string" },
+        "address": { "type": "string" },
+        "phone": { "type": "string" },
+        "type": { "type": "string", "enum": ["Tarmoq", "Chakana"] },
+        "status": { "type": "string", "enum": ["Faol", "Nofaol", "Qarzdor"] },
+        "debt": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "inn", "address", "phone", "type", "status", "debt", "createdAt"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "A product available for sale.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "price": { "type": "number" },
+        "stock": { "type": "number" },
+        "unit": { "type": "string" },
+        "image": { "type": "string" },
+        "status": { "type": "string", "enum": ["Mavjud", "Tugagan"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "category", "price", "stock", "unit", "status", "createdAt"]
+    },
+    "OrderItem": {
+      "title": "OrderItem",
+      "description": "An item within an order.",
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string" },
+        "quantity": { "type": "number" },
+        "price": { "type": "number" }
+      },
+      "required": ["productId", "quantity", "price"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "An order placed by a B2B client or Agent.",
+      "type": "object",
+      "properties": {
+        "clientId": { "type": "string" },
+        "agentId": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["Yangi", "Tasdiqlangan", "Yetkazilmoqda", "Yakunlangan", "Bekor qilingan"] },
+        "items": {
+          "type": "array",
+          "items": { "$ref": "#/entities/OrderItem" }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["clientId", "date", "totalAmount", "status", "items", "createdAt"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "A financial transaction.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "amount": { "type": "number" },
+        "type": { "type": "string", "enum": ["Kirim", "Chiqim"] },
+        "source": { "type": "string" },
+        "method": { "type": "string", "enum": ["Naqd", "Karta", "Payme", "Click", "Uzum Pay"] },
+        "date": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "amount", "type", "source", "method", "date", "createdAt"]
+    },
+    "Delivery": {
+      "title": "Delivery",
+      "description": "A delivery route assigned to a driver.",
+      "type": "object",
+      "properties": {
+        "driverId": { "type": "string" },
+        "route": { "type": "string" },
+        "status": { "type": "string", "enum": ["Yuklanmoqda", "Yo'lda", "Yakunlandi"] },
+        "points": { "type": "number" },
+        "completed": { "type": "number" },
+        "amount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["driverId", "route", "status", "points", "completed", "amount", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "#/entities/User",
+      "description": "Collection of all users in the system."
+    },
+    "/clients/{clientId}": {
+      "schema": "#/entities/Client",
+      "description": "Collection of all B2B clients and shops."
+    },
+    "/products/{productId}": {
+      "schema": "#/entities/Product",
+      "description": "Collection of all products."
+    },
+    "/orders/{orderId}": {
+      "schema": "#/entities/Order",
+      "description": "Collection of all orders."
+    },
+    "/transactions/{transactionId}": {
+      "schema": "#/entities/Transaction",
+      "description": "Collection of all financial transactions."
+    },
+    "/deliveries/{deliveryId}": {
+      "schema": "#/entities/Delivery",
+      "description": "Collection of all deliveries."
+    }
+  }
+}

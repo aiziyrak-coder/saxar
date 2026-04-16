@@ -1,0 +1,55 @@
+# SaxarERP — PostgreSQL + Django API + Nginx (SPA + /api proksi).
+# Ishga tushirish: `docker compose up --build`  → http://localhost:8080
+#
+# Prod uchun: DJANGO_SECRET_KEY va POSTGRES_PASSWORD ni o'zgartiring (`.env` yoki muhit).
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-saxar}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-saxar_local_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-saxar}
+    volumes:
+      - saxar_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://saxar:saxar_local_dev@db:5432/saxar}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-0}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-docker-local-only-change-for-production-min-50-chars-9k2m7vxqhw4n0j}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,api,web}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}
+      DJANGO_BEHIND_PROXY: ${DJANGO_BEHIND_PROXY:-0}
+      DJANGO_HEALTH_CHECK_DB: ${DJANGO_HEALTH_CHECK_DB:-1}
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "8000"
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        VITE_API_URL: /api
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      - api
+
+volumes:
+  saxar_pgdata:
