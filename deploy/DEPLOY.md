@@ -58,6 +58,42 @@ sudo certbot certonly --nginx -d api.saxar.uz
 
 Agar `options-ssl-nginx.conf` yo‘q bo‘lsa, certbot o‘zi yaratadi yoki `ssl_dhparam` qatorlarini vaqtincha izohlab qo‘ying.
 
+### 5a) `api.saxar.uz` — `NET::ERR_CERT_COMMON_NAME_INVALID` (HSTS)
+
+Brauzer shuni bildiradi: **kelgan sertifikatda `api.saxar.uz` SAN/CN da yo‘q** — ko‘pincha nginx `api` uchun `saxar.uz` papkasidagi (faqat asosiy domenlar bilan chiqarilgan) faylni ulagan yoki aksincha.
+
+Serverda tekshirish:
+
+```bash
+echo | openssl s_client -connect api.saxar.uz:443 -servername api.saxar.uz 2>/dev/null | openssl x509 -noout -subject -ext subjectAltName
+```
+
+**Variant A — bitta sertifikat (tavsiya):** `api.saxar.uz` ni SAN ga qo‘shing (cert nomi odatda `saxar.uz`):
+
+```bash
+sudo certbot certonly --webroot -w /var/www/html --cert-name saxar.uz --expand \
+  -d saxar.uz -d www.saxar.uz -d api.saxar.uz
+```
+
+Keyin nginx uchun:
+
+```bash
+sudo cp deploy/host-nginx/api.saxar.uz.shared-with-saxar-cert.conf /etc/nginx/sites-available/api.saxar.uz.conf
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+(`saxar.uz` va `api.saxar.uz` ikkalasi ham `/etc/letsencrypt/live/saxar.uz/` dan o‘sha sertni ishlatadi.)
+
+**Variant B — alohida API sertifikati:** `live/api.saxar.uz/` bo‘lishi kerak:
+
+```bash
+sudo certbot certonly --webroot -w /var/www/html -d api.saxar.uz
+```
+
+Bu holda repodagi standart `deploy/host-nginx/api.saxar.uz.conf` (yo‘llar `.../live/api.saxar.uz/`) mos keladi.
+
+**HSTS:** avval noto‘g‘ri sert bilan sayt ochilgan bo‘lsa, Chrome da `chrome://net-internals/#hsts` → *Delete domain security policies* → `api.saxar.uz` (sert serverda tuzatilgach).
+
 ## 6) Host nginx (faqat yangi saytlar)
 
 Loyiha ildizidan:
@@ -137,7 +173,7 @@ Skript `deploy/remote_bootstrap.sh` ni serverga yuklab, `/opt/saxar` da `git pul
    - `VITE_PUBLIC_API_URL=https://api.saxar.uz/api`
    - `DJANGO_ALLOWED_HOSTS` qatorida `api.saxar.uz` bo‘lsin (`.env.saxar.example` dagidek).
    - `CORS_ALLOWED_ORIGINS` va `DJANGO_CSRF_TRUSTED_ORIGINS` da `https://saxar.uz` va `https://api.saxar.uz` bo‘lsin.
-3. `export SAXAR_CERTBOT_EMAIL=...` va `bash deploy/remote_bootstrap.sh` — certbot `api.saxar.uz` uchun sert olgach, nginx SSL bloki qo‘llanadi.
+3. SSL: `export SAXAR_CERTBOT_EMAIL=...` va `bash deploy/remote_bootstrap.sh` yoki **§5a** dagi certbot. `NET::ERR_CERT_COMMON_NAME_INVALID` / HSTS bo‘lsa — sertda `api.saxar.uz` SAN bo‘lishi va nginx yo‘llari mos kelishi kerak; bitta sert uchun `deploy/host-nginx/api.saxar.uz.shared-with-saxar-cert.conf` dan nusxa oling.
 4. Frontend qayta yig‘iladi: `docker compose -f docker-compose.saxar-prod.yml --env-file .env.saxar up -d --build web`.
 
 **Bitta domen (`saxar.uz` orqali `/api`)** ishlatilsa, DNS talab qilinmaydi; `VITE_PUBLIC_API_URL=/api` qoldiring.
