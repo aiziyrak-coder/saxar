@@ -60,6 +60,39 @@ export function coerceBrowserFetchUrl(url: string): string {
   return url;
 }
 
+/**
+ * base + endpoint — string qo'shish `https://api` + `/api/foo` xatosini beradi; URL bilan yig'amiz.
+ */
+export function buildApiFetchUrl(
+  baseRaw: string,
+  endpoint: string,
+  params?: Record<string, string>
+): string {
+  const base = normalizeApiBaseUrl(baseRaw);
+  const ep = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+
+  let u: URL;
+  if (base.startsWith('http')) {
+    const baseWithSlash = base.endsWith('/') ? base : `${base}/`;
+    const relativePart = ep.replace(/^\/+/, '') || '.';
+    u = new URL(relativePart, baseWithSlash);
+  } else {
+    const origin =
+      typeof window !== 'undefined' && window.location?.origin
+        ? window.location.origin
+        : 'http://localhost:3000';
+    u = new URL(`${base.replace(/\/+$/, '')}${ep}`, origin);
+  }
+
+  if (params) {
+    for (const [k, val] of Object.entries(params)) {
+      u.searchParams.set(k, val);
+    }
+  }
+
+  return u.toString();
+}
+
 /** Vite devda odatda `/api` — `vite.config.ts` proxy orqali Django ga yo'naltiriladi */
 export const API_BASE_URL = normalizeApiBaseUrl(import.meta.env.VITE_API_URL);
 
@@ -82,21 +115,13 @@ class ApiService {
   private baseUrl: string;
 
   constructor(baseUrl: string = API_BASE_URL) {
-    this.baseUrl = baseUrl;
+    this.baseUrl = normalizeApiBaseUrl(baseUrl);
   }
 
   private async request<T>(endpoint: string, config: ApiConfig = {}): Promise<T> {
     const { params, ...fetchConfig } = config;
 
-    // Build URL with query params
-    let url = `${this.baseUrl}${endpoint}`;
-    if (params) {
-      const queryString = new URLSearchParams(params).toString();
-      if (queryString) {
-        url += `?${queryString}`;
-      }
-    }
-
+    let url = buildApiFetchUrl(this.baseUrl, endpoint, params);
     url = coerceBrowserFetchUrl(url);
 
     // Default headers

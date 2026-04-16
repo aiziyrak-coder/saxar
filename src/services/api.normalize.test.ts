@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { coerceBrowserFetchUrl, normalizeApiBaseUrl } from './api';
+import { buildApiFetchUrl, coerceBrowserFetchUrl, normalizeApiBaseUrl } from './api';
 
 describe('normalizeApiBaseUrl', () => {
   it('maps broken https://api host to /api', () => {
@@ -32,6 +32,35 @@ describe('coerceBrowserFetchUrl', () => {
     });
     expect(coerceBrowserFetchUrl('https://api/api/categories/')).toBe('https://saxar.uz/api/categories/');
     expect(coerceBrowserFetchUrl('/api/products/')).toBe('/api/products/');
+    Object.defineProperty(window, 'location', { configurable: true, value: prev });
+  });
+});
+
+describe('buildApiFetchUrl', () => {
+  it('does not concatenate https://api + /api/products into https://api/api/products', () => {
+    const prev = window.location;
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...prev, origin: 'https://saxar.uz' },
+    });
+    const u = buildApiFetchUrl('https://api', '/products/', { is_b2b: 'true' });
+    expect(u).toBe('https://saxar.uz/api/products/?is_b2b=true');
+    Object.defineProperty(window, 'location', { configurable: true, value: prev });
+  });
+
+  it('resolves absolute API base with path endpoint', () => {
+    expect(buildApiFetchUrl('https://api.saxar.uz/api', '/categories/')).toBe(
+      'https://api.saxar.uz/api/categories/'
+    );
+  });
+
+  it('appends query params for relative /api base', () => {
+    const prev = window.location;
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...prev, origin: 'http://localhost:3000' },
+    });
+    expect(buildApiFetchUrl('/api', '/health/', { x: '1' })).toBe('http://localhost:3000/api/health/?x=1');
     Object.defineProperty(window, 'location', { configurable: true, value: prev });
   });
 });
