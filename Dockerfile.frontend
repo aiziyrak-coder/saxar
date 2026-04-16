@@ -8,7 +8,12 @@ RUN npm ci
 
 COPY . .
 
-# Vite build-time: prod da bir xil domen orqali `/api` proksi
+# Repoda maxfiy kalit yo'q — Docker/CI uchun misol konfig (prod Firebase kalitini alohida berish mumkin)
+RUN if [ ! -f firebase-applet-config.json ]; then \
+      cp firebase-applet-config.example.json firebase-applet-config.json; \
+    fi
+
+# Vite build-time: prod da `/api` yoki to'liq API URL
 ARG VITE_API_URL=/api
 ENV VITE_API_URL=${VITE_API_URL}
 
