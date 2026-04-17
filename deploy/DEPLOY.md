@@ -163,13 +163,18 @@ Agar brauzer HSTS bilan “qotib” qolgan bo‘lsa: `chrome://net-internals/#hs
 
 `certbot --webroot` + repodagi `saxar.uz.conf` nusxalanadi; boshqa saytlarning `sites-enabled` matni o‘zgarmaydi.
 
+**Email:** ba’zi serverlarda `sudo -E` muhitni bermaydi — emailni **birinchi argument** qiling:
+
 ```bash
 cd /opt/saxar && git pull
-export SAXAR_CERTBOT_EMAIL="sizning@email.uz"
-sudo -E bash deploy/fix_saxar_https.sh
+sudo bash deploy/fix_saxar_https.sh 'sizning@email.uz'
 ```
 
-**Oldindan:** `saxar.uz` uchun **80** da `/.well-known/acme-challenge/` ochiq bo‘lsin (birinchi marta `saxar.uz.http-only.conf` ni `§6` bo‘yicha qo‘ygan bo‘lishingiz kerak). DNS `A` yozuvi server IP ga qarashi shart.
+Skript **`/etc/nginx/sites-enabled/saxar.uz.conf` yo‘q bo‘lsa**, avval **`saxar.uz.http-only.conf`** qo‘yadi (faqat saxar fayli), keyin certbot, keyin to‘liq SSL `saxar.uz.conf`.
+
+**Sabab (diagnostika):** `openssl` da `saxar.uz` uchun **`ailab.ziyrak.org` serti** chiqsa — saxar vhost **o‘rnatilmagan**, nginx default 443 blok boshqa sayt sertini beradi. Yuqoridagi skript buni tuzatadi.
+
+**Oldindan:** DNS `A` yozuvi `saxar.uz` / `www` server IP ga qarashi va **80-port** ochiq bo‘lsin.
 
 ## 6) Host nginx (faqat yangi saytlar)
 

@@ -2,29 +2,32 @@
 # saxar.uz + www uchun Let's Encrypt (webroot) va nginx SSL konfigini qo'llash.
 # Boshqa virtual hostlarning matnini o'zgartirmaydi — faqat saxar fayllari.
 #
-# Ishlatish (server, root):
-#   export SAXAR_CERTBOT_EMAIL="sizning@email.uz"
-#   export INSTALL_ROOT=/opt/saxar   # ixtiyoriy
-#   bash deploy/fix_saxar_https.sh
+# Email: ba'zi sudo muhitda -E ishlamaydi — shuning uchun EMAIL birinchi argument sifatida:
+#   cd /opt/saxar && sudo bash deploy/fix_saxar_https.sh 'aiziyrak@gmail.com'
 #
-# yoki:
-#   sudo SAXAR_CERTBOT_EMAIL="sizning@email.uz" bash deploy/fix_saxar_https.sh
+# yoki muhit (ishlasa):
+#   export SAXAR_CERTBOT_EMAIL='aiziyrak@gmail.com'
+#   sudo -E bash deploy/fix_saxar_https.sh
 
 set -euo pipefail
 
 INSTALL_ROOT="${INSTALL_ROOT:-/opt/saxar}"
-EMAIL="${SAXAR_CERTBOT_EMAIL:-${1:-}}"
 WEBROOT="${SAXAR_ACME_WEBROOT:-/var/www/html}"
 
+EMAIL="${SAXAR_CERTBOT_EMAIL:-}"
+if [[ -n "${1:-}" ]]; then
+  EMAIL="$1"
+fi
+
 if [[ -z "$EMAIL" ]]; then
-  echo "XATO: SAXAR_CERTBOT_EMAIL muhit o'zgaruvchisini yozing (Let's Encrypt email)." >&2
-  echo "  misol:  export SAXAR_CERTBOT_EMAIL='admin@saxar.uz'" >&2
-  echo "          cd $INSTALL_ROOT && sudo -E bash deploy/fix_saxar_https.sh" >&2
+  echo "XATO: Let's Encrypt email kerak." >&2
+  echo "  sudo bash deploy/fix_saxar_https.sh 'sizning@gmail.com'" >&2
+  echo "  yoki: export SAXAR_CERTBOT_EMAIL='...' (keyin sudo -E yoki to'g'ridan-to'g'ri root shell)" >&2
   exit 1
 fi
 
 if ! command -v certbot >/dev/null 2>&1; then
-  echo "XATO: certbot topilmadi. O'rnating: apt install certbot python3-certbot-nginx" >&2
+  echo "XATO: certbot topilmadi. O'rnating: apt install certbot" >&2
   exit 1
 fi
 
@@ -44,6 +47,27 @@ if [[ -d .git ]]; then
   git pull || true
 fi
 
+reload_nginx() {
+  nginx -t
+  if systemctl reload nginx 2>/dev/null; then
+    echo "nginx reload (systemctl) OK"
+  elif service nginx reload 2>/dev/null; then
+    echo "nginx reload (service) OK"
+  else
+    nginx -s reload
+    echo "nginx reload (nginx -s) OK"
+  fi
+}
+
+SAXAR_ENABLED="/etc/nginx/sites-enabled/saxar.uz.conf"
+if [[ ! -f "$SAXAR_ENABLED" ]]; then
+  echo "=== saxar nginx yo'q — avval HTTP (acme-challenge uchun) qo'yamiz ==="
+  cp "$INSTALL_ROOT/deploy/host-nginx/saxar.uz.http-only.conf" /etc/nginx/sites-available/saxar.uz.conf
+  ln -sf /etc/nginx/sites-available/saxar.uz.conf /etc/nginx/sites-enabled/saxar.uz.conf
+  reload_nginx
+  echo "HTTP saxar.uz yoqildi. Certbot uchun 80-port va DNS tekshiring."
+fi
+
 echo "=== Let's Encrypt (webroot, saxar.uz + www) ==="
 set +e
 certbot certonly --webroot -w "$WEBROOT" --non-interactive --agree-tos \
@@ -52,7 +76,7 @@ certbot certonly --webroot -w "$WEBROOT" --non-interactive --agree-tos \
 CB=$?
 set -e
 if [[ "$CB" -ne 0 ]]; then
-  echo "OGOH: certbot chiqishi $CB. Tekshiring: DNS A saxar.uz, 80-port ochiq, $WEBROOT da acme." >&2
+  echo "OGOH: certbot chiqishi $CB. Tekshiring: DNS A saxar.uz, 80 ochiq, $WEBROOT/.well-known" >&2
   exit "$CB"
 fi
 
@@ -65,20 +89,11 @@ fi
 echo "=== SAN tekshiruvi (faylda saxar.uz bo'lishi kerak) ==="
 openssl x509 -in "$FC" -noout -ext subjectAltName || openssl x509 -in "$FC" -noout -text | sed -n '/Subject Alternative Name/,+4p'
 
-echo "=== nginx: faqat saxar.uz SSL konfigi ==="
+echo "=== nginx: saxar.uz HTTPS konfigi (SSL) ==="
 cp "$INSTALL_ROOT/deploy/host-nginx/saxar.uz.conf" /etc/nginx/sites-available/saxar.uz.conf
 ln -sf /etc/nginx/sites-available/saxar.uz.conf /etc/nginx/sites-enabled/saxar.uz.conf
-
-nginx -t
-if systemctl reload nginx 2>/dev/null; then
-  echo "nginx reload (systemctl) OK"
-elif service nginx reload 2>/dev/null; then
-  echo "nginx reload (service) OK"
-else
-  nginx -s reload
-  echo "nginx reload (nginx -s) OK"
-fi
+reload_nginx
 
 echo ""
 echo "Tayyor. Tekshiruv: bash $INSTALL_ROOT/deploy/verify_saxar_ssl.sh"
-echo "api.saxar.uz HTTPS alohida: DEPLOY.md §5a yoki DNS bo'lgach certbot -d api.saxar.uz"
+echo "api.saxar.uz: DEPLOY.md §5a"
