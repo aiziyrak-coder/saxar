@@ -159,6 +159,18 @@ sudo nginx -t && sudo systemctl reload nginx
 
 Agar brauzer HSTS bilan “qotib” qolgan bo‘lsa: `chrome://net-internals/#hsts` → *Delete domain security policies* → `saxar.uz`.
 
+### 5e) HTTPS ishlamayapti — **bitta skript** (`saxar.uz` + `www`)
+
+`certbot --webroot` + repodagi `saxar.uz.conf` nusxalanadi; boshqa saytlarning `sites-enabled` matni o‘zgarmaydi.
+
+```bash
+cd /opt/saxar && git pull
+export SAXAR_CERTBOT_EMAIL="sizning@email.uz"
+sudo -E bash deploy/fix_saxar_https.sh
+```
+
+**Oldindan:** `saxar.uz` uchun **80** da `/.well-known/acme-challenge/` ochiq bo‘lsin (birinchi marta `saxar.uz.http-only.conf` ni `§6` bo‘yicha qo‘ygan bo‘lishingiz kerak). DNS `A` yozuvi server IP ga qarashi shart.
+
 ## 6) Host nginx (faqat yangi saytlar)
 
 Loyiha ildizidan:
