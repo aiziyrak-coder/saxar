@@ -129,7 +129,15 @@ Bu holda repodagi standart `deploy/host-nginx/api.saxar.uz.conf` (yo‘llar `...
 
 Brauzer `https://saxar.uz` uchun ham xuddi shu xatoni bersa — nginx shu `server_name` uchun **noto‘g‘ri** `ssl_certificate` bermoqda (masalan, boshqa sayt serti yoki `api` uchun fayl, yoki `default_server` boshqa blokda).
 
-Tekshiruv:
+**Avvalo serverda diagnostika** (boshqa fayllarni o‘zgartirmaydi):
+
+```bash
+cd /opt/saxar && git pull && sudo bash deploy/diagnose_saxar_cert.sh
+```
+
+Boshqa joydagi konfigni ko‘rsatish uchun: `SAXAR_NGINX_CONF=/etc/nginx/sites-available/saxar.uz.conf sudo -E bash deploy/diagnose_saxar_cert.sh`
+
+Tekshiruv (qisqa):
 
 ```bash
 echo | openssl s_client -connect saxar.uz:443 -servername saxar.uz 2>/dev/null | openssl x509 -noout -subject -ext subjectAltName
@@ -143,7 +151,13 @@ sudo certbot certonly --webroot -w /var/www/html --cert-name saxar.uz --expand \
 # api alohida sertda bo'lsa, alohida qator bilan api uchun §5a qiling
 ```
 
-Keyin `deploy/host-nginx/saxar.uz.conf` dagi `ssl_certificate` / `ssl_certificate_key` yo‘llari **shu sert papkasi** bilan mos ekanini tekshiring, `sudo nginx -t && sudo systemctl reload nginx`.
+Keyin `deploy/host-nginx/saxar.uz.conf` dagi `ssl_certificate` / `ssl_certificate_key` yo‘llari **`/etc/letsencrypt/live/saxar.uz/`** bilan mos ekanini tekshiring (boshqa sayt papkasiga ulanmagan bo‘lsin), so‘ng:
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Agar brauzer HSTS bilan “qotib” qolgan bo‘lsa: `chrome://net-internals/#hsts` → *Delete domain security policies* → `saxar.uz`.
 
 ## 6) Host nginx (faqat yangi saytlar)
 
