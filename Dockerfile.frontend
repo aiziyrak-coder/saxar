@@ -17,6 +17,10 @@ RUN if [ ! -f firebase-applet-config.json ]; then \
 ARG VITE_API_URL=/api
 ENV VITE_API_URL=${VITE_API_URL}
 
+# Prod: false — boshqa tizimlarga ta'siri yo'q, faqat login UI dagi tezkir rol tugmalari
+ARG VITE_ALLOW_DEMO_LOGIN=false
+ENV VITE_ALLOW_DEMO_LOGIN=${VITE_ALLOW_DEMO_LOGIN}
+
 RUN npm run build
 
 # --- Serve ---

@@ -7,6 +7,15 @@ Bu yo‘riqnoma **mavjud nginx saytlariga tegmaydi**: faqat `sites-available` / 
 - Chat orqali yuborilgan server parolini **darhol o‘zgartiring** va root uchun **SSH kalit** (`ssh-ed25519`) ishlating.
 - GitHub push uchun **Personal Access Token** yoki SSH kalit ishlating; parolni repoga yozmang.
 
+### 0a) Boshqa ishlab turgan dasturlar / saytlarga ta’sir qilmaslik
+
+Saxar stack **boshqa loyihalarning** portlari va nginx virtual hostlari bilan **ajratilgan** bo‘lishi kerak:
+
+- **Docker:** `docker-compose.saxar-prod.yml` faqat **`127.0.0.1:18180`** (web) va **`127.0.0.1:18181`** (API) ga bog‘lanadi — serverning `80`/`443` portlarini saxar konteynerlari **egallamaydi**. Boshqa dasturlar odatdagi portlarida qoladi.
+- **Nginx:** faqat **yangi** fayllarni qo‘shing: `sites-available` / `sites-enabled` dagi `saxar.uz.conf` va `api.saxar.uz.conf` (yoki `*.http-only.conf`). Mavjud `cdcgroup`, `fjsti` va boshqa `*.conf` fayllarini **tahrirlamang** — ularning `upstream` nomlari bilan **takrorlanmasligi** uchun saxar upstreamlari repoda alohida nomlangan.
+- **`default_server`:** saxar konfigiga **`listen 443 ssl default_server`** yoki `listen 80 default_server` **qo‘shmang**. Aks holda brauzer boshqa domen uchun ham saxar (yoki boshqa) sertifikatini ko‘rishi mumkin — **`NET::ERR_CERT_COMMON_NAME_INVALID`**.
+- **SSL yo‘llari:** `saxar.uz` bloki faqat **`/etc/letsencrypt/live/saxar.uz/`** (yoki sizda saxar uchun haqiqiy sert papkasi) dan o‘qishi kerak; `api` uchun alohida papka bo‘lsa, **`api.saxar.uz.conf`** da `live/api.saxar.uz/` qolsin — papkalarni **aralashtirib yubormang**.
+
 ## 1) DNS
 
 - `A` yozuv: `saxar.uz` → server IP  
@@ -93,6 +102,26 @@ sudo certbot certonly --webroot -w /var/www/html -d api.saxar.uz
 Bu holda repodagi standart `deploy/host-nginx/api.saxar.uz.conf` (yo‘llar `.../live/api.saxar.uz/`) mos keladi.
 
 **HSTS:** avval noto‘g‘ri sert bilan sayt ochilgan bo‘lsa, Chrome da `chrome://net-internals/#hsts` → *Delete domain security policies* → `api.saxar.uz` (sert serverda tuzatilgach).
+
+### 5b) `saxar.uz` — `NET::ERR_CERT_COMMON_NAME_INVALID`
+
+Brauzer `https://saxar.uz` uchun ham xuddi shu xatoni bersa — nginx shu `server_name` uchun **noto‘g‘ri** `ssl_certificate` bermoqda (masalan, boshqa sayt serti yoki `api` uchun fayl, yoki `default_server` boshqa blokda).
+
+Tekshiruv:
+
+```bash
+echo | openssl s_client -connect saxar.uz:443 -servername saxar.uz 2>/dev/null | openssl x509 -noout -subject -ext subjectAltName
+```
+
+Chiqishda **Subject Alternative Name** ichida `saxar.uz` (va kerak bo‘lsa `www.saxar.uz`) bo‘lishi kerak. Yo‘q bo‘lsa:
+
+```bash
+sudo certbot certonly --webroot -w /var/www/html --cert-name saxar.uz --expand \
+  -d saxar.uz -d www.saxar.uz
+# api alohida sertda bo'lsa, alohida qator bilan api uchun §5a qiling
+```
+
+Keyin `deploy/host-nginx/saxar.uz.conf` dagi `ssl_certificate` / `ssl_certificate_key` yo‘llari **shu sert papkasi** bilan mos ekanini tekshiring, `sudo nginx -t && sudo systemctl reload nginx`.
 
 ## 6) Host nginx (faqat yangi saytlar)
 
