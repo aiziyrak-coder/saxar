@@ -3,34 +3,38 @@ import { useNavigate } from 'react-router-dom';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { Package, Phone, ArrowLeft } from 'lucide-react';
+import { Package, Phone, ArrowLeft, Lock } from 'lucide-react';
 import { auth, db } from '../../firebase';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { BRAND, persistDemoUser } from '../../constants/branding';
+import { DEV_ROLE_ORDER, DEV_ROLE_PHONE_CREDENTIALS } from '../../constants/devRoleLogins';
 import { logger } from '../../services/logger';
+import type { UserRole } from '../../types';
 
 /** Prod: faqat `VITE_ALLOW_DEMO_LOGIN=true` bo‘lsa; dev: doim ko‘rinadi */
 const showDemoLogin =
   !import.meta.env.PROD || String(import.meta.env.VITE_ALLOW_DEMO_LOGIN).toLowerCase() === 'true';
 
+const ROUTES: Record<string, string> = {
+  admin: '/admin',
+  accountant: '/accountant',
+  warehouse: '/warehouse',
+  production: '/production',
+  b2b: '/b2b',
+  agent: '/agent',
+  driver: '/driver',
+};
+
+const FIXED_PASSWORD = 'SaxarERP123!';
+
 export default function Login() {
   const navigate = useNavigate();
   const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const demoAccounts: Record<string, { email: string; password: string; name: string }> = {
-    admin: { email: 'demo.admin@saxar.local', password: 'Demo123!', name: 'Demo Admin' },
-    accountant: { email: 'demo.accountant@saxar.local', password: 'Demo123!', name: 'Demo Accountant' },
-    warehouse: { email: 'demo.warehouse@saxar.local', password: 'Demo123!', name: 'Demo Warehouse' },
-    production: { email: 'demo.production@saxar.local', password: 'Demo123!', name: 'Demo Production' },
-    b2b: { email: 'demo.client@saxar.local', password: 'Demo123!', name: 'Demo B2B Mijoz' },
-    agent: { email: 'demo.agent@saxar.local', password: 'Demo123!', name: 'Demo Agent' },
-    driver: { email: 'demo.driver@saxar.local', password: 'Demo123!', name: 'Demo Haydovchi' },
-  };
-
-  const FIXED_PASSWORD = 'SaxarERP123!';
   const makeSyntheticEmail = (rawPhone: string) => {
     const digits = rawPhone.replace(/\D/g, '').trim();
     if (!digits) throw new Error('Telefon raqam kiritilmagan');
@@ -45,24 +49,16 @@ export default function Login() {
     }
     setLoading(true);
     setError('');
+    const pwd = password.trim() || FIXED_PASSWORD;
     try {
       const syntheticEmail = makeSyntheticEmail(phone.trim());
-      await signInWithEmailAndPassword(auth, syntheticEmail, FIXED_PASSWORD);
+      await signInWithEmailAndPassword(auth, syntheticEmail, pwd);
       const currentUser = auth.currentUser;
       if (currentUser) {
         const userDocRef = doc(db, 'users', currentUser.uid);
         const userDoc = await getDoc(userDocRef);
-        const role = userDoc.exists() ? userDoc.data().role : 'b2b';
-        const routes: Record<string, string> = {
-          admin: '/admin',
-          accountant: '/accountant',
-          warehouse: '/warehouse',
-          production: '/production',
-          b2b: '/b2b',
-          agent: '/agent',
-          driver: '/driver',
-        };
-        navigate(routes[role] || '/');
+        const role = userDoc.exists() ? String(userDoc.data().role || 'b2b') : 'b2b';
+        navigate(ROUTES[role] || '/');
       }
     } catch (err) {
       const error = err as { message?: string; code?: string };
@@ -71,7 +67,6 @@ export default function Login() {
         error?.code === 'auth/operation-not-allowed' || msg.includes('operation-not-allowed');
 
       if (isOpNotAllowed) {
-        // Providerlar o‘chiq bo‘lsa, UI ko‘rish uchun local demo (default: b2b).
         persistDemoUser(
           JSON.stringify({
             uid: `demo_phone_b2b_${phone.replace(/\D/g, '').slice(-6) || 'user'}`,
@@ -90,7 +85,7 @@ export default function Login() {
 
       setError(
         msg.includes('invalid-credential') || msg.includes('invalid-credentials')
-          ? "Telefon raqam yoki kirish ma'lumotlari noto'g'ri"
+          ? "Telefon raqam yoki parol noto'g'ri"
           : error?.message || 'Kirish amalga oshmadi'
       );
     } finally {
@@ -98,73 +93,63 @@ export default function Login() {
     }
   };
 
-  const handleDemoLogin = async (e: React.FormEvent, role: string) => {
-    e.preventDefault();
-    const demo = demoAccounts[role];
-    if (!demo) return;
+  const handleRoleQuickLogin = async (role: UserRole) => {
+    const creds = DEV_ROLE_PHONE_CREDENTIALS[role];
+    if (!creds) return;
+    setPhone(creds.phone);
+    setPassword(creds.password);
     setLoading(true);
     setError('');
-    const routes: Record<string, string> = {
-      admin: '/admin',
-      accountant: '/accountant',
-      warehouse: '/warehouse',
-      production: '/production',
-      b2b: '/b2b',
-      agent: '/agent',
-      driver: '/driver',
-    };
     try {
-      let credentialUser;
-      try {
-        credentialUser = await signInWithEmailAndPassword(auth, demo.email, demo.password);
-      } catch (err) {
-        const error = err as { code?: string };
-        if (error?.code === 'auth/user-not-found') {
-          credentialUser = await createUserWithEmailAndPassword(auth, demo.email, demo.password);
-        } else {
-          throw err;
-        }
-      }
-
-      const user = credentialUser.user;
-      const userDocRef = doc(db, 'users', user.uid);
+      const syntheticEmail = makeSyntheticEmail(creds.phone);
+      const credential = await signInWithEmailAndPassword(auth, syntheticEmail, creds.password);
+      const userDocRef = doc(db, 'users', credential.user.uid);
       const userDoc = await getDoc(userDocRef);
 
       if (!userDoc.exists()) {
         await setDoc(userDocRef, {
-          uid: user.uid,
-          email: demo.email,
+          uid: credential.user.uid,
+          email: syntheticEmail,
+          phone: creds.phone,
           role,
-          name: demo.name,
+          name: creds.displayName,
           createdAt: new Date().toISOString(),
         });
       }
 
-      navigate(routes[role] || '/');
+      const data = userDoc.exists() ? userDoc.data() : { role };
+      const effectiveRole = String(data.role || role);
+      navigate(ROUTES[effectiveRole] || ROUTES[role] || '/');
     } catch (err) {
-      logger.error('Demo kirish xatosi', err instanceof Error ? err : undefined);
+      logger.error('Rol bilan tezkir kirish', err instanceof Error ? err : undefined);
       const error = err as { message?: string; code?: string };
       const msg = String(error?.message || '');
-      const isOpNotAllowed = error?.code === 'auth/operation-not-allowed' || msg.includes('operation-not-allowed');
-      if (isOpNotAllowed) {
-        // Firebase Auth provider o'chirilgan bo'lsa, UI ko'rish uchun local demo mode.
+      const invalid =
+        error?.code === 'auth/invalid-credential' ||
+        error?.code === 'auth/wrong-password' ||
+        error?.code === 'auth/user-not-found' ||
+        msg.includes('invalid-credential');
+      const isOpNotAllowed =
+        error?.code === 'auth/operation-not-allowed' || msg.includes('operation-not-allowed');
+
+      if (showDemoLogin && (isOpNotAllowed || invalid)) {
         persistDemoUser(
           JSON.stringify({
-            uid: `demo_${role}`,
-            email: demo.email,
-            phone: '',
+            uid: `demo_phone_${role}_${creds.phone.replace(/\D/g, '').slice(-4)}`,
+            email: makeSyntheticEmail(creds.phone),
+            phone: creds.phone,
             role,
-            name: demo.name,
+            name: creds.displayName,
             status: 'active',
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           })
         );
-        window.location.href = routes[role] || '/';
+        window.location.href = ROUTES[role] || '/';
         return;
       }
 
-      setError('Demo akkauntga kirishda xatolik: ' + (error?.message || ''));
+      setError(error?.message || 'Kirish amalga oshmadi');
     } finally {
       setLoading(false);
     }
@@ -206,21 +191,19 @@ export default function Login() {
               {error}
             </div>
           )}
-          
+
           <div className="relative mb-3">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-slate-300" />
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-white/70 text-slate-600">
-                yoki telefon raqam orqali
-              </span>
+              <span className="px-2 bg-white/70 text-slate-600">yoki telefon raqam orqali</span>
             </div>
           </div>
 
           <form className="space-y-4" onSubmit={handlePhoneLogin}>
             <div>
-              <label className="block text-sm font-medium text-slate-200">
+              <label htmlFor="login-phone" className="block text-sm font-medium text-slate-700">
                 Telefon raqam
               </label>
               <div className="mt-1 relative rounded-md shadow-sm">
@@ -228,6 +211,7 @@ export default function Login() {
                   <Phone className="h-5 w-5 text-slate-400" />
                 </div>
                 <Input
+                  id="login-phone"
                   type="tel"
                   required
                   autoComplete="tel"
@@ -237,6 +221,27 @@ export default function Login() {
                   onChange={(e) => setPhone(e.target.value)}
                 />
               </div>
+            </div>
+
+            <div>
+              <label htmlFor="login-password" className="block text-sm font-medium text-slate-700">
+                Parol
+              </label>
+              <div className="mt-1 relative rounded-md shadow-sm">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Lock className="h-5 w-5 text-slate-400" />
+                </div>
+                <Input
+                  id="login-password"
+                  type="password"
+                  autoComplete="current-password"
+                  className="pl-10"
+                  placeholder="Bo‘sh qoldirsangiz — standart demo parol"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </div>
+              <p className="mt-1 text-xs text-slate-500">Qo‘lda kirishda parol bo‘sh bo‘lsa, ichki demo parol ishlatiladi.</p>
             </div>
 
             <div className="flex items-center justify-between">
@@ -265,50 +270,48 @@ export default function Login() {
           </form>
 
           {showDemoLogin && (
-            <div className="mt-4 hidden sm:block">
+            <div className="mt-5">
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
                   <div className="w-full border-t border-slate-300" />
                 </div>
                 <div className="relative flex justify-center text-sm">
-                  <span className="px-2 bg-white/70 text-slate-600">
-                    Demo uchun rollarni tanlang
-                  </span>
+                  <span className="px-2 bg-white/70 text-slate-600">Tezkir kirish (rol bo‘yicha)</span>
                 </div>
               </div>
 
-              <p className="text-xs text-slate-400 mb-2">
-                Har bir rol uchun demo akkaunt mavjud. Tugmani bossangiz, avtomatik ravishda mos demo foydalanuvchi bilan tizimga kiritiladi.
+              <p className="text-xs text-slate-500 mt-2 mb-3">
+                Tugmani bosing: telefon va parol avtomatik to‘ldiriladi va tizimga kiriladi. Faqat dev yoki{' '}
+                <code className="text-[11px] bg-slate-100 px-1 rounded">VITE_ALLOW_DEMO_LOGIN=true</code>.
               </p>
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <Button variant="outline" onClick={(e) => handleDemoLogin(e, 'admin')} className="w-full text-xs" disabled={loading}>
-                  Admin / Direktor
-                </Button>
-                <Button variant="outline" onClick={(e) => handleDemoLogin(e, 'accountant')} className="w-full text-xs" disabled={loading}>
-                  Buxgalter
-                </Button>
-                <Button variant="outline" onClick={(e) => handleDemoLogin(e, 'warehouse')} className="w-full text-xs" disabled={loading}>
-                  Ombor mudiri
-                </Button>
-                <Button variant="outline" onClick={(e) => handleDemoLogin(e, 'production')} className="w-full text-xs" disabled={loading}>
-                  Ishlab chiqarish
-                </Button>
-                <Button variant="outline" onClick={(e) => handleDemoLogin(e, 'b2b')} className="w-full text-xs" disabled={loading}>
-                  B2B Mijoz
-                </Button>
-                <Button variant="outline" onClick={(e) => handleDemoLogin(e, 'agent')} className="w-full text-xs" disabled={loading}>
-                  Agent
-                </Button>
-                <Button variant="outline" onClick={(e) => handleDemoLogin(e, 'driver')} className="w-full text-xs" disabled={loading}>
-                  Dastavkachi
-                </Button>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {DEV_ROLE_ORDER.map((role) => {
+                  const c = DEV_ROLE_PHONE_CREDENTIALS[role];
+                  return (
+                    <Button
+                      key={role}
+                      type="button"
+                      variant="outline"
+                      className="h-auto min-h-[3.25rem] flex-col items-stretch py-2 px-3 text-left gap-0.5"
+                      disabled={loading}
+                      onClick={() => void handleRoleQuickLogin(role)}
+                    >
+                      <span className="text-xs font-semibold text-slate-800 w-full">{c.title}</span>
+                      <span className="text-[10px] text-slate-500 font-mono w-full truncate" title={`${c.phone} · ${c.password}`}>
+                        {c.phone} · {c.password}
+                      </span>
+                    </Button>
+                  );
+                })}
               </div>
             </div>
           )}
 
-          <div className="mt-4 text-center text-sm hidden sm:block">
+          <div className="mt-4 text-center text-sm">
             <span className="text-slate-600">Akkauntingiz yo'qmi? </span>
             <button
+              type="button"
               onClick={() => navigate('/register')}
               className="font-medium text-emerald-700 hover:text-emerald-600"
             >

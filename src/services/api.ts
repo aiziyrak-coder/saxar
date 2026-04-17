@@ -16,7 +16,7 @@ export function normalizeApiBaseUrl(raw: unknown): string {
   const t = typeof raw === 'string' && raw.trim() ? raw.trim() : '';
   if (!t) return fallback;
 
-  let s = t.replace(/\/+$/, '') || fallback;
+  const s = t.replace(/\/+$/, '') || fallback;
 
   if (/^https?:\/\//i.test(s)) {
     try {
