@@ -58,12 +58,34 @@ curl -sS http://127.0.0.1:18181/api/health/
 
 ## 5) SSL sertifikatlar (Certbot)
 
-Misol (nginx plugin — mavjud nginx konfigni **o‘zgartirmasdan**, faqat sert olish uchun webroot ham ishlatiladi; sizda certbot odatiy bo‘lsa):
+### 5c) Boshqa dasturlarga tegmasin — **webroot** usuli (tavsiya)
+
+Bitta serverda **boshqa saytlar** (cdcgroup, fjsti, …) ishlayotgan bo‘lsa, `certbot --nginx` ba’zan **tashqi nginx fayllarini** o‘zgartiradi yoki `default_server` bilan chalkashadi. Saxar uchun **xavfsiz** yo‘l:
+
+1. `/.well-known/acme-challenge/` uchun `root /var/www/html;` saxar **HTTP** bloklarida bor (repodagi konflar).
+2. Sert faqat fayl sifatida chiqadi — boshqa `server {}` larni certbot **tahrirlamaydi**:
 
 ```bash
-sudo certbot certonly --nginx -d saxar.uz -d www.saxar.uz
-sudo certbot certonly --nginx -d api.saxar.uz
+sudo certbot certonly --webroot -w /var/www/html --cert-name saxar.uz \
+  -d saxar.uz -d www.saxar.uz
+# api kerak bo'lsa (SAN bitta sertda bo'lishi mumkin):
+# sudo certbot certonly --webroot -w /var/www/html --cert-name saxar.uz --expand \
+#   -d saxar.uz -d www.saxar.uz -d api.saxar.uz
+# yoki alohida:
+# sudo certbot certonly --webroot -w /var/www/html -d api.saxar.uz
 ```
+
+3. Keyin faqat **saxar** nginx fayllarini repodan nusxalang (`§6`), `nginx -t` va `reload`.
+
+Tekshiruv (hech narsani o‘zgartirmaydi):
+
+```bash
+bash deploy/verify_saxar_ssl.sh
+```
+
+**Qo‘lda tekshirish:** `openssl x509 -in /etc/letsencrypt/live/saxar.uz/fullchain.pem -noout -ext subjectAltName` — chiqishda `DNS:saxar.uz` bo‘lishi kerak.
+
+`certbot --nginx` — faqat siz boshqa virtual hostlarga ishonchingiz komil bo‘lsa; aks holda **§5c** bilan qoling.
 
 Agar `options-ssl-nginx.conf` yo‘q bo‘lsa, certbot o‘zi yaratadi yoki `ssl_dhparam` qatorlarini vaqtincha izohlab qo‘ying.
 

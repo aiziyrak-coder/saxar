@@ -95,6 +95,7 @@ if [[ "$NGINX_AVAILABLE" -eq 1 ]]; then
   nginx -t
   systemctl reload nginx 2>/dev/null || service nginx reload 2>/dev/null || nginx -s reload
 
+  # Certbot faqat --webroot (boshqa saytlarning nginx konfiglarini o'zgartirmaydi).
   if command -v certbot >/dev/null 2>&1 && [[ -n "${SAXAR_CERTBOT_EMAIL:-}" ]]; then
     set +e
     certbot certonly --webroot -w /var/www/html --non-interactive --agree-tos \
