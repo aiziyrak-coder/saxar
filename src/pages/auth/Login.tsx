@@ -4,7 +4,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Package, Phone, ArrowLeft, Lock } from 'lucide-react';
-import { auth, db } from '../../firebase';
+import { auth, db, isFirebaseConfigured } from '../../firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { BRAND, persistDemoUser } from '../../constants/branding';
@@ -47,6 +47,23 @@ export default function Login() {
     setError('');
     const pwd = password.trim() || FIXED_PASSWORD;
     try {
+      if (!isFirebaseConfigured()) {
+        persistDemoUser(
+          JSON.stringify({
+            uid: `demo_phone_b2b_${phone.replace(/\D/g, '').slice(-6) || 'user'}`,
+            email: makeSyntheticEmail(phone.trim()),
+            phone,
+            role: 'b2b',
+            name: 'Demo B2B Client',
+            status: 'active',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          })
+        );
+        window.location.href = '/b2b';
+        return;
+      }
+
       const syntheticEmail = makeSyntheticEmail(phone.trim());
       await signInWithEmailAndPassword(auth, syntheticEmail, pwd);
       const currentUser = auth.currentUser;
@@ -61,8 +78,13 @@ export default function Login() {
       const msg = String(fbErr?.message || '');
       const isOpNotAllowed =
         fbErr?.code === 'auth/operation-not-allowed' || msg.includes('operation-not-allowed');
+      const apiKeyBad =
+        fbErr?.code === 'auth/invalid-api-key' ||
+        (typeof fbErr?.code === 'string' && fbErr.code.includes('api-key')) ||
+        msg.toLowerCase().includes('api-key-not-valid') ||
+        msg.toLowerCase().includes('invalid-api-key');
 
-      if (isOpNotAllowed) {
+      if (isOpNotAllowed || apiKeyBad) {
         persistDemoUser(
           JSON.stringify({
             uid: `demo_phone_b2b_${phone.replace(/\D/g, '').slice(-6) || 'user'}`,
@@ -97,6 +119,23 @@ export default function Login() {
     setLoading(true);
     setError('');
     try {
+      if (!isFirebaseConfigured()) {
+        persistDemoUser(
+          JSON.stringify({
+            uid: `demo_phone_${role}_${creds.phone.replace(/\D/g, '').slice(-4)}`,
+            email: makeSyntheticEmail(creds.phone),
+            phone: creds.phone,
+            role,
+            name: creds.displayName,
+            status: 'active',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          })
+        );
+        window.location.href = ROUTES[role] || '/';
+        return;
+      }
+
       const syntheticEmail = makeSyntheticEmail(creds.phone);
       const credential = await signInWithEmailAndPassword(auth, syntheticEmail, creds.password);
       const userDocRef = doc(db, 'users', credential.user.uid);
@@ -117,7 +156,6 @@ export default function Login() {
       const effectiveRole = String(data.role || role);
       navigate(ROUTES[effectiveRole] || ROUTES[role] || '/');
     } catch (err) {
-      logger.error('Rol bilan tezkir kirish', err instanceof Error ? err : undefined);
       const fbErr = err as { message?: string; code?: string };
       const msg = String(fbErr?.message || '');
       const invalid =
@@ -127,8 +165,17 @@ export default function Login() {
         msg.includes('invalid-credential');
       const isOpNotAllowed =
         fbErr?.code === 'auth/operation-not-allowed' || msg.includes('operation-not-allowed');
+      const apiKeyBad =
+        fbErr?.code === 'auth/invalid-api-key' ||
+        (typeof fbErr?.code === 'string' && fbErr.code.includes('api-key')) ||
+        msg.toLowerCase().includes('api-key-not-valid') ||
+        msg.toLowerCase().includes('invalid-api-key');
 
-      if (isOpNotAllowed || invalid) {
+      if (!apiKeyBad && !isOpNotAllowed && !invalid) {
+        logger.error('Rol bilan tezkir kirish', err instanceof Error ? err : undefined);
+      }
+
+      if (isOpNotAllowed || invalid || apiKeyBad) {
         persistDemoUser(
           JSON.stringify({
             uid: `demo_phone_${role}_${creds.phone.replace(/\D/g, '').slice(-4)}`,

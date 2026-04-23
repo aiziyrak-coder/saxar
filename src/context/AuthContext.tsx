@@ -8,7 +8,7 @@ import React, {
 } from 'react';
 import { onAuthStateChanged, signOut as firebaseSignOut, type User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { auth, db } from '../firebase';
+import { auth, db, isFirebaseConfigured } from '../firebase';
 import type { User, UserRole } from '../types';
 import { clearDemoUserStorage, readDemoUserRaw } from '../constants/branding';
 import { clearApiSession, clearStoredAuthTokens } from '../services/api';
@@ -151,6 +151,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   useEffect(() => {
+    if (!isFirebaseConfigured()) {
+      const demoUser = readDemoUserFromStorage();
+      if (demoUser) {
+        applyUserSession(demoUser);
+      } else {
+        clearSession();
+      }
+      setLoading(false);
+      return;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         clearDemoUserStorage();

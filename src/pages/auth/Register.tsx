@@ -4,7 +4,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Package, Building, Phone, FileText, ArrowLeft } from 'lucide-react';
-import { auth, db } from '../../firebase';
+import { auth, db, isFirebaseConfigured } from '../../firebase';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { persistDemoUser } from '../../constants/branding';
@@ -48,6 +48,24 @@ export default function Register() {
     setLoading(true);
     setError('');
     try {
+      if (!isFirebaseConfigured()) {
+        const syntheticEmailFallback = makeSyntheticEmail(formData.phone);
+        persistDemoUser(
+          JSON.stringify({
+            uid: `demo_register_b2b_${formData.phone.replace(/\D/g, '').slice(-6) || 'user'}`,
+            email: syntheticEmailFallback,
+            phone: formData.phone.trim(),
+            role: 'b2b',
+            name: formData.companyName,
+            status: 'active',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          })
+        );
+        window.location.href = '/b2b';
+        return;
+      }
+
       const syntheticEmail = makeSyntheticEmail(formData.phone);
       const result = await createUserWithEmailAndPassword(auth, syntheticEmail, FIXED_PASSWORD);
       await updateProfile(result.user, { displayName: companyName });
@@ -92,8 +110,13 @@ export default function Register() {
       const msg = String(fbErr?.message || '');
       const isOpNotAllowed =
         fbErr?.code === 'auth/operation-not-allowed' || msg.includes('operation-not-allowed');
+      const apiKeyBad =
+        fbErr?.code === 'auth/invalid-api-key' ||
+        (typeof fbErr?.code === 'string' && fbErr.code.includes('api-key')) ||
+        msg.toLowerCase().includes('api-key-not-valid') ||
+        msg.toLowerCase().includes('invalid-api-key');
 
-      if (isOpNotAllowed) {
+      if (isOpNotAllowed || apiKeyBad) {
         const syntheticEmailFallback = makeSyntheticEmail(formData.phone);
         persistDemoUser(
           JSON.stringify({
