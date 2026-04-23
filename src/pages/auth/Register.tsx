@@ -3,19 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { Package, Building, Phone, FileText, CheckCircle2, ArrowLeft } from 'lucide-react';
+import { Package, Building, Phone, FileText, ArrowLeft } from 'lucide-react';
 import { auth, db } from '../../firebase';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
-import { sendVerificationCode } from '../../services/integrations';
 import { persistDemoUser } from '../../constants/branding';
 
 export default function Register() {
   const navigate = useNavigate();
-  const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [smsCode, setSmsCode] = useState(['', '', '', '', '', '']);
   const [formData, setFormData] = useState({
     phone: '',
     inn: '',
@@ -29,14 +26,14 @@ export default function Register() {
     return `${digits}@saxar.local`;
   };
 
-  const handleStep1 = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const stirDigits = formData.inn.replace(/\D/g, '');
     const phoneDigits = formData.phone.replace(/\D/g, '');
     const companyName = formData.companyName.trim();
 
     if (stirDigits.length !== 9) {
-      setError('STIR 9 raqamdan iborat bo\'lishi kerak');
+      setError("STIR 9 raqamdan iborat bo'lishi kerak");
       return;
     }
     if (!companyName) {
@@ -44,42 +41,10 @@ export default function Register() {
       return;
     }
     if (phoneDigits.length < 9 || phoneDigits.length > 12) {
-      setError('Telefon raqam 9 dan 12 gacha raqamdan iborat bo\'lishi kerak');
+      setError("Telefon raqam 9 dan 12 gacha raqamdan iborat bo'lishi kerak");
       return;
     }
-    setError('');
-    setLoading(true);
-    try {
-      const { success } = await sendVerificationCode(formData.phone.trim());
-      if (success) setStep(2);
-      else setError('SMS yuborishda xatolik. Qayta urinib ko\'ring.');
-    } catch {
-      setError('SMS xizmati vaqtincha ishlamayapti');
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const handleStep2 = (e: React.FormEvent) => {
-    e.preventDefault();
-    const code = smsCode.join('');
-    if (code.length !== 6) {
-      setError('6 xonali kodni kiriting');
-      return;
-    }
-    setError('');
-    setStep(3);
-  };
-
-  const handleStep3 = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const stirDigits = formData.inn.replace(/\D/g, '');
-    const phoneDigits = formData.phone.replace(/\D/g, '');
-    const companyName = formData.companyName.trim();
-    if (stirDigits.length !== 9 || phoneDigits.length < 9 || phoneDigits.length > 12 || !companyName) {
-      setError('Ma\'lumotlarni tekshirib, qayta urinib ko\'ring');
-      return;
-    }
     setLoading(true);
     setError('');
     try {
@@ -123,13 +88,12 @@ export default function Register() {
       });
       navigate('/b2b');
     } catch (err) {
-      const error = err as { message?: string; code?: string };
-      const msg = String(error?.message || '');
+      const fbErr = err as { message?: string; code?: string };
+      const msg = String(fbErr?.message || '');
       const isOpNotAllowed =
-        error?.code === 'auth/operation-not-allowed' || msg.includes('operation-not-allowed');
-    
+        fbErr?.code === 'auth/operation-not-allowed' || msg.includes('operation-not-allowed');
+
       if (isOpNotAllowed) {
-        // Providerlar o'chiq bo'lsa, UI ko'rish uchun local demo (default: b2b).
         const syntheticEmailFallback = makeSyntheticEmail(formData.phone);
         persistDemoUser(
           JSON.stringify({
@@ -146,21 +110,15 @@ export default function Register() {
         window.location.href = '/b2b';
         return;
       }
-    
+
       setError(
         msg.includes('email-already-in-use')
           ? "Bu telefon raqam allaqachon ro'yxatdan o'tgan"
-          : error?.message || "Ro'yxatdan o'tishda xatolik"
+          : fbErr?.message || "Ro'yxatdan o'tishda xatolik"
       );
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleNext = (e: React.FormEvent) => {
-    if (step === 1) handleStep1(e);
-    else if (step === 2) handleStep2(e);
-    else if (step === 3) handleStep3(e);
   };
 
   return (
@@ -200,172 +158,77 @@ export default function Register() {
             </div>
           )}
 
-          {step === 1 && (
-            <div className="relative mb-3">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-slate-300" />
+          <form className="space-y-4" onSubmit={handleSubmit}>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">STIR (INN)</label>
+              <div className="mt-1 relative rounded-md shadow-sm">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <FileText className="h-5 w-5 text-slate-400" />
+                </div>
+                <Input
+                  type="text"
+                  required
+                  className="pl-10"
+                  placeholder="9 raqamli STIR"
+                  value={formData.inn}
+                  onChange={(e) => setFormData({ ...formData, inn: e.target.value })}
+                />
               </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white/70 text-slate-600">
-                  yoki telefon raqam orqali
-                </span>
+              <p className="mt-1 text-xs text-slate-500">9 raqamli korxona identifikatori</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Korxona (Do'kon) nomi</label>
+              <div className="mt-1 relative rounded-md shadow-sm">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Building className="h-5 w-5 text-slate-400" />
+                </div>
+                <Input
+                  type="text"
+                  required
+                  className="pl-10"
+                  placeholder="Masalan: Omadli Savdo MChJ"
+                  value={formData.companyName}
+                  onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
+                />
               </div>
             </div>
-          )}
-          
-          {/* Progress Bar */}
-          <div className="mb-4 hidden sm:block">
-            <div className="flex items-center justify-between">
-              <div className={`flex flex-col items-center ${step >= 1 ? 'text-emerald-700' : 'text-slate-500'}`}>
-                <div className={`h-8 w-8 rounded-full flex items-center justify-center border-2 ${step >= 1 ? 'border-emerald-500 bg-emerald-500/15' : 'border-slate-700'}`}>1</div>
-                <span className="text-xs mt-1 font-medium">Ma'lumotlar</span>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Telefon raqam</label>
+              <div className="mt-1 relative rounded-md shadow-sm">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Phone className="h-5 w-5 text-slate-400" />
+                </div>
+                <Input
+                  type="tel"
+                  required
+                  className="pl-10"
+                  placeholder="+998 90 123 45 67"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                />
               </div>
-              <div className={`flex-1 h-0.5 mx-2 ${step >= 2 ? 'bg-emerald-500' : 'bg-emerald-200/60'}`}></div>
-              <div className={`flex flex-col items-center ${step >= 2 ? 'text-emerald-700' : 'text-slate-500'}`}>
-                <div className={`h-8 w-8 rounded-full flex items-center justify-center border-2 ${step >= 2 ? 'border-emerald-500 bg-emerald-500/15' : 'border-slate-700'}`}>2</div>
-                <span className="text-xs mt-1 font-medium">SMS Tasdiq</span>
-              </div>
-              <div className={`flex-1 h-0.5 mx-2 ${step >= 3 ? 'bg-emerald-500' : 'bg-emerald-200/60'}`}></div>
-              <div className={`flex flex-col items-center ${step >= 3 ? 'text-emerald-700' : 'text-slate-500'}`}>
-                <div className={`h-8 w-8 rounded-full flex items-center justify-center border-2 ${step >= 3 ? 'border-emerald-500 bg-emerald-500/15' : 'border-slate-700'}`}>3</div>
-                <span className="text-xs mt-1 font-medium">Tugatish</span>
-              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                Ro'yxatdan keyin kirish paroli tizim tomonidan belgilanadi (demo rejimda avtomatik).
+              </p>
             </div>
-          </div>
 
-          <form className="space-y-4" onSubmit={handleNext}>
-            {step === 1 && (
-              <>
-                <div>
-                  <label className="block text-sm font-medium text-slate-200">STIR (INN)</label>
-                  <div className="mt-1 relative rounded-md shadow-sm">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <FileText className="h-5 w-5 text-slate-400" />
-                    </div>
-                    <Input
-                      type="text"
-                      required
-                      className="pl-10"
-                      placeholder="9 ruxsatli raqam"
-                      value={formData.inn}
-                      onChange={(e) => setFormData({...formData, inn: e.target.value})}
-                    />
-                  </div>
-                  <p className="mt-1 text-xs text-slate-400">STIR kiritilganda korxona nomi avtomatik tortib olinadi (Soliq.uz)</p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-200">Korxona (Do'kon) nomi</label>
-                  <div className="mt-1 relative rounded-md shadow-sm">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Building className="h-5 w-5 text-slate-400" />
-                    </div>
-                    <Input
-                      type="text"
-                      required
-                      className="pl-10"
-                      placeholder="Masalan: Omadli Savdo MChJ"
-                      value={formData.companyName}
-                      onChange={(e) => setFormData({...formData, companyName: e.target.value})}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-200">Telefon raqam</label>
-                  <div className="mt-1 relative rounded-md shadow-sm">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Phone className="h-5 w-5 text-slate-400" />
-                    </div>
-                    <Input
-                      type="tel"
-                      required
-                      className="pl-10"
-                      placeholder="+998 90 123 45 67"
-                      value={formData.phone}
-                      onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                    />
-                  </div>
-                </div>
-
-                <Button type="submit" variant="primary" className="w-full justify-center" disabled={loading}>
-                  {loading ? 'SMS yuborilmoqda...' : 'Davom etish'}
-                </Button>
-              </>
-            )}
-
-            {step === 2 && (
-              <>
-                <div className="text-center mb-4">
-                  <p className="text-sm text-slate-600">
-                    <span className="font-bold text-slate-900">{formData.phone}</span> raqamiga tasdiqlash kodi yuborildi.
-                  </p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-200 text-center">SMS Kodni kiriting</label>
-                  <div className="mt-2 flex justify-center gap-2">
-                    {[0, 1, 2, 3, 4, 5].map((i) => (
-                      <input
-                        key={i}
-                        type="text"
-                        inputMode="numeric"
-                        maxLength={1}
-                        className="w-10 h-12 text-center text-xl font-bold border border-emerald-200/60 rounded-md focus:ring-emerald-400 focus:border-emerald-400 bg-white/75 text-slate-900"
-                        value={smsCode[i]}
-                        onChange={(e) => {
-                          const v = e.target.value.replace(/\D/g, '').slice(0, 1);
-                          const next = [...smsCode];
-                          next[i] = v;
-                          setSmsCode(next);
-                          if (v && i < 5) (e.target.nextElementSibling as HTMLInputElement)?.focus();
-                        }}
-                        onKeyDown={(e) => {
-                          const target = e.target as HTMLInputElement;
-                          if (e.key === 'Backspace' && !smsCode[i] && i > 0) {
-                            (target.previousElementSibling as HTMLInputElement | null)?.focus();
-                          }
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-                <div className="text-center text-sm mt-4">
-                  <span className="text-slate-400">Kod kelmadimi? </span>
-                  <button type="button" className="text-emerald-700 font-medium hover:text-emerald-600">Qayta yuborish (0:59)</button>
-                </div>
-                <Button type="submit" variant="primary" className="w-full justify-center mt-6" disabled={loading}>
-                  Tasdiqlash
-                </Button>
-                <Button type="button" variant="ghost" className="w-full justify-center mt-2 text-slate-400" onClick={() => setStep(1)}>
-                  Orqaga
-                </Button>
-              </>
-            )}
-
-            {step === 3 && (
-              <div className="text-center py-3">
-                <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-emerald-500/15 mb-4 border border-emerald-200/60">
-                  <CheckCircle2 className="h-10 w-10 text-emerald-600" />
-                </div>
-                <h3 className="text-lg font-bold text-slate-900 mb-2">Arizangiz qabul qilindi!</h3>
-                <p className="text-slate-600 mb-4">
-                  Sizning ma'lumotlaringiz tekshirilmoqda. Admin tasdiqlaganidan so'ng tizimga kirishingiz va ulgurji narxlarni ko'rishingiz mumkin.
-                </p>
-                <Button type="submit" variant="primary" className="w-full justify-center" disabled={loading}>
-                  {loading ? 'Yuklanmoqda...' : 'B2B Portalga kirish'}
-                </Button>
-              </div>
-            )}
+            <Button type="submit" variant="primary" className="w-full justify-center" disabled={loading}>
+              {loading ? 'Ro\'yxatdan o\'tilyapti...' : 'Ro\'yxatdan o\'tish'}
+            </Button>
           </form>
 
-          {step === 1 && (
-            <div className="mt-4 text-center text-sm hidden sm:block">
-              <span className="text-slate-600">Akkauntingiz bormi? </span>
-              <button onClick={() => navigate('/login')} className="font-medium text-emerald-700 hover:text-emerald-600">
-                Tizimga kirish
-              </button>
-            </div>
-          )}
+          <div className="mt-4 text-center text-sm">
+            <span className="text-slate-600">Akkauntingiz bormi? </span>
+            <button
+              type="button"
+              onClick={() => navigate('/login')}
+              className="font-medium text-emerald-700 hover:text-emerald-600"
+            >
+              Tizimga kirish
+            </button>
+          </div>
         </Card>
       </div>
     </div>

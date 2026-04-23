@@ -1,8 +1,8 @@
 import type { UserRole } from '../types';
 
 /**
- * Faqat dev / VITE_ALLOW_DEMO_LOGIN=true uchun: har rol uchun alohida telefon va parol.
- * Firebase ishlamasa, Login sahifasi shu ma'lumotlar bilan local demo sessiyasini ochadi.
+ * Har rol uchun alohida demo telefon va parol (Login sahifasidagi tugmalar).
+ * Firebase ishlamasa yoki akkaunt bo'lmasa — shu ma'lumotlar bilan local demo sessiyasi ochiladi.
  */
 export const DEV_ROLE_PHONE_CREDENTIALS: Record<
   UserRole,

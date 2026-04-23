@@ -12,10 +12,6 @@ import { DEV_ROLE_ORDER, DEV_ROLE_PHONE_CREDENTIALS } from '../../constants/devR
 import { logger } from '../../services/logger';
 import type { UserRole } from '../../types';
 
-/** Prod: faqat `VITE_ALLOW_DEMO_LOGIN=true` bo‘lsa; dev: doim ko‘rinadi */
-const showDemoLogin =
-  !import.meta.env.PROD || String(import.meta.env.VITE_ALLOW_DEMO_LOGIN).toLowerCase() === 'true';
-
 const ROUTES: Record<string, string> = {
   admin: '/admin',
   accountant: '/accountant',
@@ -61,10 +57,10 @@ export default function Login() {
         navigate(ROUTES[role] || '/');
       }
     } catch (err) {
-      const error = err as { message?: string; code?: string };
-      const msg = String(error?.message || '');
+      const fbErr = err as { message?: string; code?: string };
+      const msg = String(fbErr?.message || '');
       const isOpNotAllowed =
-        error?.code === 'auth/operation-not-allowed' || msg.includes('operation-not-allowed');
+        fbErr?.code === 'auth/operation-not-allowed' || msg.includes('operation-not-allowed');
 
       if (isOpNotAllowed) {
         persistDemoUser(
@@ -86,7 +82,7 @@ export default function Login() {
       setError(
         msg.includes('invalid-credential') || msg.includes('invalid-credentials')
           ? "Telefon raqam yoki parol noto'g'ri"
-          : error?.message || 'Kirish amalga oshmadi'
+          : fbErr?.message || 'Kirish amalga oshmadi'
       );
     } finally {
       setLoading(false);
@@ -122,17 +118,17 @@ export default function Login() {
       navigate(ROUTES[effectiveRole] || ROUTES[role] || '/');
     } catch (err) {
       logger.error('Rol bilan tezkir kirish', err instanceof Error ? err : undefined);
-      const error = err as { message?: string; code?: string };
-      const msg = String(error?.message || '');
+      const fbErr = err as { message?: string; code?: string };
+      const msg = String(fbErr?.message || '');
       const invalid =
-        error?.code === 'auth/invalid-credential' ||
-        error?.code === 'auth/wrong-password' ||
-        error?.code === 'auth/user-not-found' ||
+        fbErr?.code === 'auth/invalid-credential' ||
+        fbErr?.code === 'auth/wrong-password' ||
+        fbErr?.code === 'auth/user-not-found' ||
         msg.includes('invalid-credential');
       const isOpNotAllowed =
-        error?.code === 'auth/operation-not-allowed' || msg.includes('operation-not-allowed');
+        fbErr?.code === 'auth/operation-not-allowed' || msg.includes('operation-not-allowed');
 
-      if (showDemoLogin && (isOpNotAllowed || invalid)) {
+      if (isOpNotAllowed || invalid) {
         persistDemoUser(
           JSON.stringify({
             uid: `demo_phone_${role}_${creds.phone.replace(/\D/g, '').slice(-4)}`,
@@ -149,7 +145,7 @@ export default function Login() {
         return;
       }
 
-      setError(error?.message || 'Kirish amalga oshmadi');
+      setError(fbErr?.message || 'Kirish amalga oshmadi');
     } finally {
       setLoading(false);
     }
@@ -185,19 +181,45 @@ export default function Login() {
       </div>
 
       <div className="w-full relative z-10 flex justify-center">
-        <Card className="p-4 sm:p-6 sm:rounded-3xl w-full max-w-md mx-auto overflow-hidden">
+        <Card className="p-4 sm:p-6 sm:rounded-3xl w-full max-w-lg mx-auto overflow-hidden">
           {error && (
             <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100">
               {error}
             </div>
           )}
 
+          <div className="mb-5">
+            <p className="text-center text-sm font-semibold text-slate-800 mb-1">Demo: rol bo‘yicha kirish</p>
+            <p className="text-center text-xs text-slate-500 mb-3">
+              Tugmani bosing — telefon va parol maydonda to‘ldiriladi va tizimga kiriladi.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {DEV_ROLE_ORDER.map((role) => {
+                const c = DEV_ROLE_PHONE_CREDENTIALS[role];
+                return (
+                  <Button
+                    key={role}
+                    type="button"
+                    variant="outline"
+                    className="h-auto flex-col items-stretch py-2.5 px-3 text-left gap-1 border-emerald-200/80 bg-white/90 hover:bg-emerald-50/80"
+                    disabled={loading}
+                    onClick={() => void handleRoleQuickLogin(role)}
+                  >
+                    <span className="text-xs font-bold text-emerald-900 w-full">{c.title}</span>
+                    <span className="text-[11px] text-slate-600 w-full select-all font-mono">{c.phone}</span>
+                    <span className="text-[11px] text-slate-500 w-full select-all font-mono">Parol: {c.password}</span>
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="relative mb-3">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-slate-300" />
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-white/70 text-slate-600">yoki telefon raqam orqali</span>
+              <span className="px-2 bg-white/70 text-slate-600">yoki qo‘lda telefon va parol</span>
             </div>
           </div>
 
@@ -236,12 +258,12 @@ export default function Login() {
                   type="password"
                   autoComplete="current-password"
                   className="pl-10"
-                  placeholder="Bo‘sh qoldirsangiz — standart demo parol"
+                  placeholder="Bo‘sh bo‘lsa — SaxarERP123!"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
               </div>
-              <p className="mt-1 text-xs text-slate-500">Qo‘lda kirishda parol bo‘sh bo‘lsa, ichki demo parol ishlatiladi.</p>
+              <p className="mt-1 text-xs text-slate-500">Qo‘lda kirishda parol bo‘sh bo‘lsa, standart demo parol ishlatiladi.</p>
             </div>
 
             <div className="flex items-center justify-between">
@@ -256,9 +278,8 @@ export default function Login() {
                   Eslab qolish
                 </label>
               </div>
-
               <div className="text-sm">
-                <span className="text-slate-500">Telefon raqamni tekshiring</span>
+                <span className="text-slate-500">Telefonni tekshiring</span>
               </div>
             </div>
 
@@ -268,45 +289,6 @@ export default function Login() {
               </Button>
             </div>
           </form>
-
-          {showDemoLogin && (
-            <div className="mt-5">
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-slate-300" />
-                </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="px-2 bg-white/70 text-slate-600">Tezkir kirish (rol bo‘yicha)</span>
-                </div>
-              </div>
-
-              <p className="text-xs text-slate-500 mt-2 mb-3">
-                Tugmani bosing: telefon va parol avtomatik to‘ldiriladi va tizimga kiriladi. Faqat dev yoki{' '}
-                <code className="text-[11px] bg-slate-100 px-1 rounded">VITE_ALLOW_DEMO_LOGIN=true</code>.
-              </p>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {DEV_ROLE_ORDER.map((role) => {
-                  const c = DEV_ROLE_PHONE_CREDENTIALS[role];
-                  return (
-                    <Button
-                      key={role}
-                      type="button"
-                      variant="outline"
-                      className="h-auto min-h-[3.25rem] flex-col items-stretch py-2 px-3 text-left gap-0.5"
-                      disabled={loading}
-                      onClick={() => void handleRoleQuickLogin(role)}
-                    >
-                      <span className="text-xs font-semibold text-slate-800 w-full">{c.title}</span>
-                      <span className="text-[10px] text-slate-500 font-mono w-full truncate" title={`${c.phone} · ${c.password}`}>
-                        {c.phone} · {c.password}
-                      </span>
-                    </Button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
 
           <div className="mt-4 text-center text-sm">
             <span className="text-slate-600">Akkauntingiz yo'qmi? </span>
