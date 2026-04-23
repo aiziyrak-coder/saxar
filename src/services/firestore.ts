@@ -1,4 +1,4 @@
-import { db } from '../firebase';
+import { getFirebaseDb } from '../firebase';
 import {
   collection,
   doc,
@@ -40,11 +40,11 @@ export class FirestoreService<T extends DocumentData> {
   constructor(private collectionName: string) {}
 
   private getCollectionRef() {
-    return collection(db, this.collectionName);
+    return collection(getFirebaseDb(), this.collectionName);
   }
 
   private getDocRef(id: string) {
-    return doc(db, this.collectionName, id);
+    return doc(getFirebaseDb(), this.collectionName, id);
   }
 
   // Create
@@ -146,10 +146,10 @@ export const payrollService = new FirestoreService<PayrollItem>('payroll_items')
 export async function runBatch<T extends Record<string, any>>(
   operations: { type: 'create' | 'update' | 'delete'; collection: string; id?: string; data?: T }[]
 ): Promise<void> {
-  const batch = writeBatch(db);
+  const batch = writeBatch(getFirebaseDb());
 
   for (const op of operations) {
-    const collectionRef = collection(db, op.collection);
+    const collectionRef = collection(getFirebaseDb(), op.collection);
     
     switch (op.type) {
       case 'create':
@@ -181,7 +181,7 @@ export async function runBatch<T extends Record<string, any>>(
 // Get clients by agent (agentga biriktirilgan do'konlar)
 export async function getClientsByAgentId(agentId: string): Promise<Client[]> {
   const q = query(
-    collection(db, 'clients'),
+    collection(getFirebaseDb(), 'clients'),
     where('agentId', '==', agentId),
     limit(500)
   );
@@ -194,7 +194,7 @@ export async function getClientsByAgentId(agentId: string): Promise<Client[]> {
 // Get orders by client
 export async function getOrdersByClient(clientId: string, limitCount: number = 50): Promise<Order[]> {
   const q = query(
-    collection(db, 'orders'),
+    collection(getFirebaseDb(), 'orders'),
     where('clientId', '==', clientId),
     limit(limitCount * 2)
   );
@@ -207,7 +207,7 @@ export async function getOrdersByClient(clientId: string, limitCount: number = 5
 // Get orders by status
 export async function getOrdersByStatus(status: string, limitCount: number = 100): Promise<Order[]> {
   const q = query(
-    collection(db, 'orders'),
+    collection(getFirebaseDb(), 'orders'),
     where('status', '==', status),
     orderBy('createdAt', 'desc'),
     limit(limitCount)
@@ -219,7 +219,7 @@ export async function getOrdersByStatus(status: string, limitCount: number = 100
 // Get orders by multiple statuses (in-memory filter to avoid composite index)
 export async function getOrdersByStatuses(statuses: string[], limitCount: number = 100): Promise<Order[]> {
   const q = query(
-    collection(db, 'orders'),
+    collection(getFirebaseDb(), 'orders'),
     orderBy('createdAt', 'desc'),
     limit(limitCount * 2)
   );
@@ -234,7 +234,7 @@ export async function getOrdersByStatuses(statuses: string[], limitCount: number
 // Get inventory by product
 export async function getInventoryByProduct(productId: string): Promise<InventoryItem[]> {
   const q = query(
-    collection(db, 'inventory'),
+    collection(getFirebaseDb(), 'inventory'),
     where('productId', '==', productId),
     where('status', '==', 'available'),
     orderBy('expiryDate', 'asc')
@@ -249,7 +249,7 @@ export async function getExpiringInventory(days: number = 7): Promise<InventoryI
   expiryDate.setDate(expiryDate.getDate() + days);
   
   const q = query(
-    collection(db, 'inventory'),
+    collection(getFirebaseDb(), 'inventory'),
     where('expiryDate', '<=', expiryDate.toISOString()),
     where('status', '==', 'available'),
     orderBy('expiryDate', 'asc')
@@ -262,7 +262,7 @@ export async function getExpiringInventory(days: number = 7): Promise<InventoryI
 export async function getLowStockProducts(): Promise<InventoryItem[]> {
   // This requires aggregation query
   const q = query(
-    collection(db, 'inventory'),
+    collection(getFirebaseDb(), 'inventory'),
     where('status', '==', 'available')
   );
   const snapshot = await getDocs(q);
@@ -287,7 +287,7 @@ export async function getLowStockProducts(): Promise<InventoryItem[]> {
 // Get payments by client (for Akt sverka / history)
 export async function getPaymentsByClient(clientId: string, limitCount: number = 50): Promise<Payment[]> {
   const q = query(
-    collection(db, 'payments'),
+    collection(getFirebaseDb(), 'payments'),
     where('clientId', '==', clientId),
     limit(limitCount * 2)
   );
@@ -301,7 +301,7 @@ export async function getPaymentsByClient(clientId: string, limitCount: number =
 export async function getClientBalance(clientId: string): Promise<number> {
   // Get all orders for client
   const ordersQuery = query(
-    collection(db, 'orders'),
+    collection(getFirebaseDb(), 'orders'),
     where('clientId', '==', clientId)
   );
   const ordersSnap = await getDocs(ordersQuery);
@@ -309,7 +309,7 @@ export async function getClientBalance(clientId: string): Promise<number> {
 
   // Get all payments for client
   const paymentsQuery = query(
-    collection(db, 'payments'),
+    collection(getFirebaseDb(), 'payments'),
     where('clientId', '==', clientId),
     where('direction', '==', 'in')
   );
@@ -322,7 +322,7 @@ export async function getClientBalance(clientId: string): Promise<number> {
 // Get KPI by agent and period
 export async function getKPIByAgentAndPeriod(agentId: string, period: string): Promise<KPIRecord | null> {
   const q = query(
-    collection(db, 'kpi_records'),
+    collection(getFirebaseDb(), 'kpi_records'),
     where('agentId', '==', agentId),
     where('period', '==', period),
     limit(1)
@@ -346,7 +346,7 @@ export async function deductFIFO(
 ): Promise<{ success: boolean; shortage?: number }> {
   const batches = await getInventoryByProduct(productId);
   let remaining = quantity;
-  const batch = writeBatch(db);
+  const batch = writeBatch(getFirebaseDb());
   const now = new Date().toISOString();
 
   for (const item of batches) {
@@ -355,7 +355,7 @@ export async function deductFIFO(
     if (take <= 0) continue;
     remaining -= take;
     const newQty = item.quantity - take;
-    batch.update(doc(db, 'inventory', item.id), {
+    batch.update(doc(getFirebaseDb(), 'inventory', item.id), {
       quantity: newQty,
       updatedAt: now,
     });
@@ -372,7 +372,7 @@ export async function deductFIFO(
       createdByName,
       createdAt: now,
     };
-    const txRef = doc(collection(db, 'inventory_transactions'));
+    const txRef = doc(collection(getFirebaseDb(), 'inventory_transactions'));
     batch.set(txRef, txData);
   }
 
@@ -400,8 +400,8 @@ export async function inventoryAdjustment(
   const diff = newQty - currentQty;
   if (diff === 0) return;
   const now = new Date().toISOString();
-  const batch = writeBatch(db);
-  batch.update(doc(db, 'inventory', batchId), {
+  const batch = writeBatch(getFirebaseDb());
+  batch.update(doc(getFirebaseDb(), 'inventory', batchId), {
     quantity: newQty,
     updatedAt: now,
   });
@@ -417,7 +417,7 @@ export async function inventoryAdjustment(
     createdByName,
     createdAt: now,
   };
-  const txRef = doc(collection(db, 'inventory_transactions'));
+  const txRef = doc(collection(getFirebaseDb(), 'inventory_transactions'));
   batch.set(txRef, txData);
   await batch.commit();
 }

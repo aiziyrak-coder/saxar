@@ -4,7 +4,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Search, Plus, MapPin, Phone, Building2, CheckCircle2, AlertCircle, Loader2, XCircle } from 'lucide-react';
 import { collection, getDocs, query, orderBy, limit, doc, updateDoc } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { getFirebaseDb } from '../../firebase';
 import { useAuth } from '../../context/AuthContext';
 import { getClientBalance } from '../../services/firestore';
 import { logAudit, AuditActions, EntityTypes } from '../../services/audit';
@@ -20,7 +20,7 @@ export default function AdminClients() {
 
   useEffect(() => {
     const q = query(
-      collection(db, 'clients'),
+      collection(getFirebaseDb(), 'clients'),
       orderBy('createdAt', 'desc'),
       limit(200)
     );
@@ -40,12 +40,12 @@ export default function AdminClients() {
   const handleApprove = async (client: Client) => {
     setActionLoading(client.id);
     try {
-      await updateDoc(doc(db, 'clients', client.id), {
+      await updateDoc(doc(getFirebaseDb(), 'clients', client.id), {
         registrationStatus: 'approved',
         status: 'active',
         updatedAt: new Date().toISOString(),
       });
-      await updateDoc(doc(db, 'users', client.id), {
+      await updateDoc(doc(getFirebaseDb(), 'users', client.id), {
         status: 'active',
         updatedAt: new Date().toISOString(),
       });
@@ -63,12 +63,12 @@ export default function AdminClients() {
   const handleReject = async (client: Client) => {
     setActionLoading(client.id);
     try {
-      await updateDoc(doc(db, 'clients', client.id), {
+      await updateDoc(doc(getFirebaseDb(), 'clients', client.id), {
         registrationStatus: 'rejected',
         status: 'inactive',
         updatedAt: new Date().toISOString(),
       });
-      await updateDoc(doc(db, 'users', client.id), {
+      await updateDoc(doc(getFirebaseDb(), 'users', client.id), {
         status: 'inactive',
         updatedAt: new Date().toISOString(),
       });

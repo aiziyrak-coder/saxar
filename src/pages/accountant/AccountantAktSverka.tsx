@@ -4,7 +4,7 @@ import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { FileText, Search } from 'lucide-react';
 import { collection, getDocs, query, where, orderBy, limit } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { getFirebaseDb } from '../../firebase';
 import type { Client } from '../../types';
 import { getClientBalance } from '../../services/firestore';
 
@@ -17,7 +17,7 @@ export default function AccountantAktSverka() {
 
   useEffect(() => {
     const q = query(
-      collection(db, 'clients'),
+      collection(getFirebaseDb(), 'clients'),
       where('status', '==', 'active'),
       orderBy('name'),
       limit(200)

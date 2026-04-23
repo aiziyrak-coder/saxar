@@ -1,5 +1,5 @@
 import { collection, doc, setDoc, getDocs, query, limit } from 'firebase/firestore';
-import { db } from '../firebase';
+import { getFirebaseDb } from '../firebase';
 import type { Category, Brand, Product } from '../types';
 
 const CATEGORIES_COLLECTION = 'categories';
@@ -267,7 +267,7 @@ const demoProducts: Omit<Product, 'id' | 'categoryId' | 'categoryName' | 'brandI
  */
 export async function hasExistingData(): Promise<boolean> {
   try {
-    const categoriesQuery = query(collection(db, CATEGORIES_COLLECTION), limit(1));
+    const categoriesQuery = query(collection(getFirebaseDb(), CATEGORIES_COLLECTION), limit(1));
     const categoriesSnapshot = await getDocs(categoriesQuery);
     return !categoriesSnapshot.empty;
   } catch (error) {
@@ -283,7 +283,7 @@ export async function seedCategories(): Promise<Category[]> {
   const categories: Category[] = [];
   
   for (const catData of demoCategories) {
-    const docRef = doc(collection(db, CATEGORIES_COLLECTION));
+    const docRef = doc(collection(getFirebaseDb(), CATEGORIES_COLLECTION));
     const category: Category = {
       ...catData,
       id: docRef.id,
@@ -300,7 +300,7 @@ export async function seedCategories(): Promise<Category[]> {
  * Seed brand to Firestore
  */
 export async function seedBrand(): Promise<Brand> {
-  const docRef = doc(collection(db, BRANDS_COLLECTION));
+  const docRef = doc(collection(getFirebaseDb(), BRANDS_COLLECTION));
   const brand: Brand = {
     ...demoBrand,
     id: docRef.id,
@@ -320,7 +320,7 @@ export async function seedProducts(categories: Category[], brand: Brand): Promis
     const prodData = demoProducts[i];
     const category = categories[i % categories.length];
     
-    const docRef = doc(collection(db, PRODUCTS_COLLECTION));
+    const docRef = doc(collection(getFirebaseDb(), PRODUCTS_COLLECTION));
     const product: Product = {
       ...prodData,
       id: docRef.id,

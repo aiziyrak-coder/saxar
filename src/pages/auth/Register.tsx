@@ -4,7 +4,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Package, Building, Phone, FileText, ArrowLeft } from 'lucide-react';
-import { auth, db, isFirebaseConfigured } from '../../firebase';
+import { getFirebaseAuth, getFirebaseDb, isFirebaseConfigured } from '../../firebase';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { persistDemoUser } from '../../constants/branding';
@@ -67,11 +67,12 @@ export default function Register() {
       }
 
       const syntheticEmail = makeSyntheticEmail(formData.phone);
+      const auth = getFirebaseAuth();
       const result = await createUserWithEmailAndPassword(auth, syntheticEmail, FIXED_PASSWORD);
       await updateProfile(result.user, { displayName: companyName });
       const uid = result.user.uid;
       const now = new Date().toISOString();
-      await setDoc(doc(db, 'users', uid), {
+      await setDoc(doc(getFirebaseDb(), 'users', uid), {
         uid,
         email: syntheticEmail,
         phone: formData.phone.trim(),
@@ -84,7 +85,7 @@ export default function Register() {
         createdAt: now,
         updatedAt: now,
       });
-      await setDoc(doc(db, 'clients', uid), {
+      await setDoc(doc(getFirebaseDb(), 'clients', uid), {
         id: uid,
         name: companyName,
         ownerName: companyName,

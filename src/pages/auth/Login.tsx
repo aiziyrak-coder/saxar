@@ -4,7 +4,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Package, Phone, ArrowLeft, Lock } from 'lucide-react';
-import { auth, db, isFirebaseConfigured } from '../../firebase';
+import { getFirebaseAuth, getFirebaseDb, isFirebaseConfigured } from '../../firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { BRAND, persistDemoUser } from '../../constants/branding';
@@ -65,10 +65,11 @@ export default function Login() {
       }
 
       const syntheticEmail = makeSyntheticEmail(phone.trim());
+      const auth = getFirebaseAuth();
       await signInWithEmailAndPassword(auth, syntheticEmail, pwd);
       const currentUser = auth.currentUser;
       if (currentUser) {
-        const userDocRef = doc(db, 'users', currentUser.uid);
+        const userDocRef = doc(getFirebaseDb(), 'users', currentUser.uid);
         const userDoc = await getDoc(userDocRef);
         const role = userDoc.exists() ? String(userDoc.data().role || 'b2b') : 'b2b';
         navigate(ROUTES[role] || '/');
@@ -137,8 +138,9 @@ export default function Login() {
       }
 
       const syntheticEmail = makeSyntheticEmail(creds.phone);
+      const auth = getFirebaseAuth();
       const credential = await signInWithEmailAndPassword(auth, syntheticEmail, creds.password);
-      const userDocRef = doc(db, 'users', credential.user.uid);
+      const userDocRef = doc(getFirebaseDb(), 'users', credential.user.uid);
       const userDoc = await getDoc(userDocRef);
 
       if (!userDoc.exists()) {

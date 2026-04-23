@@ -1,4 +1,4 @@
-import { db } from '../firebase';
+import { getFirebaseDb } from '../firebase';
 import {
   collection,
   query,
@@ -25,7 +25,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 
   // Daily revenue
   const dailyOrdersQuery = query(
-    collection(db, 'orders'),
+    collection(getFirebaseDb(), 'orders'),
     where('orderDate', '==', todayStr),
     where('status', 'in', ['confirmed', 'picking', 'packed', 'in_transit', 'delivered'])
   );
@@ -35,7 +35,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 
   // Yesterday's revenue for comparison
   const yesterdayOrdersQuery = query(
-    collection(db, 'orders'),
+    collection(getFirebaseDb(), 'orders'),
     where('orderDate', '==', yesterdayStr),
     where('status', 'in', ['confirmed', 'picking', 'packed', 'in_transit', 'delivered'])
   );
@@ -45,7 +45,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 
   // Monthly revenue
   const monthlyOrdersQuery = query(
-    collection(db, 'orders'),
+    collection(getFirebaseDb(), 'orders'),
     where('orderDate', '>=', startOfMonthStr),
     where('orderDate', '<=', todayStr),
     where('status', 'in', ['confirmed', 'picking', 'packed', 'in_transit', 'delivered'])
@@ -56,7 +56,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 
   // Active clients
   const clientsQuery = query(
-    collection(db, 'clients'),
+    collection(getFirebaseDb(), 'clients'),
     where('status', '==', 'active')
   );
   const clientsSnap = await getDocs(clientsQuery);
@@ -64,7 +64,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 
   // New clients this month
   const newClientsQuery = query(
-    collection(db, 'clients'),
+    collection(getFirebaseDb(), 'clients'),
     where('createdAt', '>=', startOfMonthDate.toISOString()),
     where('status', '==', 'active')
   );
@@ -73,7 +73,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 
   // Total receivables
   const receivablesQuery = query(
-    collection(db, 'orders'),
+    collection(getFirebaseDb(), 'orders'),
     where('paymentStatus', 'in', ['pending', 'partial']),
     where('status', 'in', ['delivered', 'in_transit'])
   );
@@ -97,7 +97,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 
   // Low stock products
   const inventoryQuery = query(
-    collection(db, 'inventory'),
+    collection(getFirebaseDb(), 'inventory'),
     where('status', '==', 'available')
   );
   const inventorySnap = await getDocs(inventoryQuery);
@@ -108,7 +108,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   });
   
   // Get products with minStock
-  const productsQuery = query(collection(db, 'products'));
+  const productsQuery = query(collection(getFirebaseDb(), 'products'));
   const productsSnap = await getDocs(productsQuery);
   let lowStockProducts = 0;
   productsSnap.docs.forEach(doc => {
@@ -123,7 +123,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   const sevenDaysFromNow = new Date();
   sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
   const expiringQuery = query(
-    collection(db, 'inventory'),
+    collection(getFirebaseDb(), 'inventory'),
     where('expiryDate', '<=', sevenDaysFromNow.toISOString()),
     where('status', '==', 'available')
   );
@@ -166,7 +166,7 @@ export async function getSalesChartData(days: number = 30): Promise<ChartData> {
     
     // Get orders for this date
     const ordersQuery = query(
-      collection(db, 'orders'),
+      collection(getFirebaseDb(), 'orders'),
       where('orderDate', '==', dateStr),
       where('status', 'in', ['confirmed', 'picking', 'packed', 'in_transit', 'delivered'])
     );
@@ -192,7 +192,7 @@ export async function getTopProducts(limitCount: number = 10): Promise<{ name: s
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   
   const ordersQuery = query(
-    collection(db, 'orders'),
+    collection(getFirebaseDb(), 'orders'),
     where('orderDate', '>=', thirtyDaysAgo.toISOString().split('T')[0]),
     where('status', 'in', ['confirmed', 'picking', 'packed', 'in_transit', 'delivered'])
   );
@@ -226,7 +226,7 @@ export async function getTopAgents(limitCount: number = 5): Promise<{ name: stri
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   
   const ordersQuery = query(
-    collection(db, 'orders'),
+    collection(getFirebaseDb(), 'orders'),
     where('orderDate', '>=', thirtyDaysAgo.toISOString().split('T')[0]),
     where('status', 'in', ['confirmed', 'picking', 'packed', 'in_transit', 'delivered']),
     where('agentId', '!=', null)
@@ -259,7 +259,7 @@ export async function getTopAgents(limitCount: number = 5): Promise<{ name: stri
 // Get recent orders
 export async function getRecentOrders(limitCount: number = 10): Promise<Order[]> {
   const ordersQuery = query(
-    collection(db, 'orders'),
+    collection(getFirebaseDb(), 'orders'),
     orderBy('createdAt', 'desc'),
     limit(limitCount)
   );
@@ -275,11 +275,11 @@ export async function getSalesByRegion(): Promise<{ region: string; sales: numbe
 
   const [ordersSnap, clientsSnap] = await Promise.all([
     getDocs(query(
-      collection(db, 'orders'),
+      collection(getFirebaseDb(), 'orders'),
       where('orderDate', '>=', dateStr),
       limit(500)
     )),
-    getDocs(collection(db, 'clients')),
+    getDocs(collection(getFirebaseDb(), 'clients')),
   ]);
 
   const validStatuses = ['confirmed', 'picking', 'packed', 'in_transit', 'delivered'];
@@ -321,21 +321,21 @@ export async function getPendingApprovalsCount(): Promise<{
 }> {
   // Pending clients
   const clientsQuery = query(
-    collection(db, 'clients'),
+    collection(getFirebaseDb(), 'clients'),
     where('registrationStatus', '==', 'pending')
   );
   const clientsSnap = await getDocs(clientsQuery);
   
   // Pending orders
   const ordersQuery = query(
-    collection(db, 'orders'),
+    collection(getFirebaseDb(), 'orders'),
     where('status', '==', 'pending')
   );
   const ordersSnap = await getDocs(ordersQuery);
   
   // Pending expenses (would need expense approval workflow)
   const expensesQuery = query(
-    collection(db, 'expenses'),
+    collection(getFirebaseDb(), 'expenses'),
     where('approvedBy', '==', null)
   );
   const expensesSnap = await getDocs(expensesQuery);
@@ -353,13 +353,13 @@ export async function getPLSummary(
   endDate: string
 ): Promise<{ revenue: number; expenses: number; profit: number }> {
   const ordersQuery = query(
-    collection(db, 'orders'),
+    collection(getFirebaseDb(), 'orders'),
     where('orderDate', '>=', startDate),
     where('orderDate', '<=', endDate),
     limit(1000)
   );
   const expensesQuery = query(
-    collection(db, 'expenses'),
+    collection(getFirebaseDb(), 'expenses'),
     where('date', '>=', startDate),
     where('date', '<=', endDate),
     limit(1000)

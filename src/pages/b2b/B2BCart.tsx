@@ -9,7 +9,7 @@ import { orderService, generateOrderNumber } from '../../services/firestore';
 import { logAudit, AuditActions, EntityTypes } from '../../services/audit';
 import { Modal } from '../../components/ui/Modal';
 import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { getFirebaseDb } from '../../firebase';
 import type { Order } from '../../types';
 import { logger } from '../../services/logger';
 
@@ -24,7 +24,7 @@ export default function B2BCart() {
 
   useEffect(() => {
     if (!user?.uid) return;
-    getDoc(doc(db, 'clients', user.uid)).then((snap) => {
+    getDoc(doc(getFirebaseDb(), 'clients', user.uid)).then((snap) => {
       if (snap.exists()) setClientAddress(snap.data().address || '');
     }).catch(() => {});
   }, [user?.uid]);

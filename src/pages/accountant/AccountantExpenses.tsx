@@ -6,7 +6,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { Plus } from 'lucide-react';
 import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { getFirebaseDb } from '../../firebase';
 import { useAuth } from '../../context/AuthContext';
 import { expenseService } from '../../services/firestore';
 import { logAudit, AuditActions, EntityTypes } from '../../services/audit';
@@ -34,7 +34,7 @@ export default function AccountantExpenses() {
 
   const loadExpenses = () => {
     const q = query(
-      collection(db, 'expenses'),
+      collection(getFirebaseDb(), 'expenses'),
       orderBy('date', 'desc'),
       limit(50)
     );

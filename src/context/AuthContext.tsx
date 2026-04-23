@@ -8,7 +8,7 @@ import React, {
 } from 'react';
 import { onAuthStateChanged, signOut as firebaseSignOut, type User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { auth, db, isFirebaseConfigured } from '../firebase';
+import { getFirebaseAuth, getFirebaseDb, isFirebaseConfigured } from '../firebase';
 import type { User, UserRole } from '../types';
 import { clearDemoUserStorage, readDemoUserRaw } from '../constants/branding';
 import { clearApiSession, clearStoredAuthTokens } from '../services/api';
@@ -162,11 +162,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
+    const auth = getFirebaseAuth();
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         clearDemoUserStorage();
         try {
-          const userDocRef = doc(db, 'users', firebaseUser.uid);
+          const userDocRef = doc(getFirebaseDb(), 'users', firebaseUser.uid);
           const userDoc = await getDoc(userDocRef);
           if (userDoc.exists()) {
             const data = userDoc.data() as Record<string, unknown>;
@@ -196,7 +197,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const onSessionExpired = () => {
       clearStoredAuthTokens();
-      void firebaseSignOut(auth).catch(() => {});
+      if (isFirebaseConfigured()) {
+        void firebaseSignOut(getFirebaseAuth()).catch(() => {});
+      }
       clearDemoUserStorage();
       clearSession();
       setLoading(false);
@@ -207,10 +210,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = useCallback(async () => {
     clearApiSession();
-    try {
-      await firebaseSignOut(auth);
-    } catch {
-      /* ignore */
+    if (isFirebaseConfigured()) {
+      try {
+        await firebaseSignOut(getFirebaseAuth());
+      } catch {
+        /* ignore */
+      }
     }
     clearDemoUserStorage();
     clearSession();

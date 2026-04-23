@@ -2,8 +2,9 @@ import { vi } from 'vitest';
 
 // Mock Firebase
 vi.mock('../firebase', () => ({
-  auth: {},
-  db: {},
+  isFirebaseConfigured: () => false,
+  getFirebaseAuth: () => ({ currentUser: null }),
+  getFirebaseDb: () => ({}),
 }));
 
 // Mock window.matchMedia
