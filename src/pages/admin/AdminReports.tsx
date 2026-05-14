@@ -1,18 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Download, Calendar, Filter, Loader2 } from 'lucide-react';
 import { getPLSummary, getSalesByRegion } from '../../services/dashboard';
+import { downloadCsv } from '../../platform/csv';
+import { addNotification, notifyPlannedFeature } from '../../platform/notifications';
 
-const salesData = [
-  { name: 'Yan', un: 4000, yog: 2400, shakar: 2400 },
-  { name: 'Fev', un: 3000, yog: 1398, shakar: 2210 },
-  { name: 'Mar', un: 2000, yog: 9800, shakar: 2290 },
-  { name: 'Apr', un: 2780, yog: 3908, shakar: 2000 },
-  { name: 'May', un: 1890, yog: 4800, shakar: 2181 },
-  { name: 'Iyun', un: 2390, yog: 3800, shakar: 2500 },
-];
 const COLORS = ['#059669', '#10b981', '#f59e0b', '#ef4444'];
 
 function formatMoney(n: number) {
@@ -50,15 +44,31 @@ export default function AdminReports() {
     return () => { cancelled = true; };
   }, []);
 
+  const handleExport = () => {
+    if (pl) {
+      downloadCsv(`hisobot-pl-${Date.now()}.csv`, [
+        { tushum: pl.revenue, xarajat: pl.expenses, foyda: pl.profit },
+      ]);
+      addNotification('Eksport', 'Joriy oy P&L qisqa hisobot yuklandi.');
+    } else {
+      addNotification('Eksport', 'P&L ma’lumoti yo‘q — avval moliya ma’lumotlarini kiriting.');
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-2xl font-bold text-slate-900">Hisobotlar (P&L va Tahlil)</h1>
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-2">
+          <Button
+            variant="outline"
+            className="gap-2"
+            type="button"
+            onClick={() => notifyPlannedFeature('Sana oralig‘i', 'Davomatni tanlash kalendari rejada.')}
+          >
             <Calendar className="h-4 w-4" /> Sana oralig'i
           </Button>
-          <Button variant="primary" className="gap-2">
+          <Button variant="primary" className="gap-2" type="button" onClick={handleExport}>
             <Download className="h-4 w-4" /> Eksport
           </Button>
         </div>
@@ -96,33 +106,29 @@ export default function AdminReports() {
         <Card>
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-lg font-bold text-slate-900">Kategoriyalar bo'yicha savdo</h3>
-            <Button variant="ghost" size="sm"><Filter className="h-4 w-4" /></Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              type="button"
+              onClick={() => notifyPlannedFeature('Filtr', 'Kategoriya bo‘yicha filtrlash rejada.')}
+            >
+              <Filter className="h-4 w-4" />
+            </Button>
           </div>
-          <div className="h-80 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={salesData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
-                <Tooltip cursor={{fill: '#f1f5f9'}} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '20px' }} />
-                <Bar dataKey="un" name="Un mahsulotlari" stackId="a" fill="#059669" radius={[0, 0, 4, 4]} />
-                <Bar dataKey="yog" name="Yog' mahsulotlari" stackId="a" fill="#10b981" />
-                <Bar dataKey="shakar" name="Shakar" stackId="a" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="h-80 w-full min-h-[320px] min-w-0 flex flex-col items-center justify-center text-slate-500">
+            <p className="text-center px-4">Kategoriyalar bo‘yicha diagramma uchun ma’lumotlar bazasiga savdo yozuvlari kerak.</p>
           </div>
         </Card>
 
         {/* Sales by Region */}
         <Card>
           <h3 className="text-lg font-bold text-slate-900 mb-6">Hududlar kesimida savdo</h3>
-          <div className="h-80 w-full flex flex-col items-center justify-center">
+          <div className="h-80 w-full min-h-[300px] min-w-0 flex flex-col items-center justify-center">
             {regionData.length === 0 ? (
               <p className="text-slate-500">Hudud bo‘yicha ma’lumot yo‘q</p>
             ) : (
               <>
-                <ResponsiveContainer width="100%" height="80%">
+                <ResponsiveContainer width="100%" height={280}>
                   <PieChart>
                     <Pie
                       data={regionData}

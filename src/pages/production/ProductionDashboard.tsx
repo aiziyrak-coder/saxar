@@ -1,24 +1,33 @@
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Factory, Plus, ArrowRight, CheckCircle2, Package, Settings, BarChart3 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { notifyPlannedFeature } from '../../platform/notifications';
 
 export default function ProductionDashboard() {
-  const activeBatches = [
-    { id: 'PRD-B-101', product: 'Premium Un 50kg', status: 'Jarayonda', progress: 65, expected: 500, unit: 'qop', startTime: '08:00' },
-    { id: 'PRD-B-102', product: 'Makaron 10kg', status: 'Kutish', progress: 0, expected: 200, unit: 'qop', startTime: '14:00' },
-  ];
+  const navigate = useNavigate();
+  const activeBatches: {
+    id: string;
+    product: string;
+    status: string;
+    progress: number;
+    expected: number;
+    unit: string;
+    startTime: string;
+  }[] = [];
 
-  const rawMaterials = [
-    { name: 'Bug\'doy (1-nav)', stock: 12500, unit: 'kg', status: 'Yaxshi' },
-    { name: 'Qadoqlash qoplari', stock: 850, unit: 'dona', status: 'Kam qoldi' },
-    { name: 'Tuz', stock: 450, unit: 'kg', status: 'Yaxshi' },
-  ];
+  const rawMaterials: { name: string; stock: number; unit: string; status: string }[] = [];
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-slate-900">Ishlab chiqarish (Production)</h1>
-        <Button variant="primary" className="gap-2">
+        <Button
+          variant="primary"
+          className="gap-2"
+          type="button"
+          onClick={() => notifyPlannedFeature('Yangi ishlab chiqarish partiyasi')}
+        >
           <Plus className="h-4 w-4" /> Yangi partiya
         </Button>
       </div>
@@ -33,7 +42,10 @@ export default function ProductionDashboard() {
               </h3>
             </div>
             <div className="p-6 space-y-6">
-              {activeBatches.map((batch) => (
+              {activeBatches.length === 0 ? (
+                <p className="text-sm text-slate-500">Faol partiyalar yo‘q (namuna ma’lumotlar olib tashlangan).</p>
+              ) : (
+                activeBatches.map((batch) => (
                 <div key={batch.id} className="border border-slate-200 rounded-xl p-5 hover:border-emerald-300 transition-colors">
                   <div className="flex justify-between items-start mb-4">
                     <div>
@@ -67,26 +79,67 @@ export default function ProductionDashboard() {
                   </div>
                   
                   <div className="mt-6 pt-4 border-t border-slate-100 flex gap-3">
-                    <Button variant="outline" size="sm" className="flex-1">Tahrirlash</Button>
-                    <Button variant="primary" size="sm" className="flex-1 gap-2" disabled={batch.progress === 100}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      type="button"
+                      onClick={() => notifyPlannedFeature('Partiyani tahrirlash', batch.id)}
+                    >
+                      Tahrirlash
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      className="flex-1 gap-2"
+                      type="button"
+                      disabled={batch.progress === 100}
+                      onClick={() => {
+                        if (batch.progress === 100) return;
+                        notifyPlannedFeature('Partiyani yakunlash', batch.id);
+                      }}
+                    >
                       Yakunlash <CheckCircle2 className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>
-              ))}
+                ))
+              )}
             </div>
           </Card>
 
           {/* Quick Actions */}
           <div className="grid grid-cols-2 gap-4">
-            <Card className="flex flex-col items-center justify-center p-6 text-center hover:bg-slate-50 cursor-pointer transition-colors border-dashed border-2">
+            <Card
+              className="flex flex-col items-center justify-center p-6 text-center hover:bg-slate-50 cursor-pointer transition-colors border-dashed border-2"
+              role="button"
+              tabIndex={0}
+              onClick={() => navigate('/production/transfer')}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  navigate('/production/transfer');
+                }
+              }}
+            >
               <div className="h-12 w-12 bg-emerald-50 rounded-full flex items-center justify-center mb-3">
                 <Package className="h-6 w-6 text-emerald-600" />
               </div>
               <h4 className="font-bold text-slate-900">Tayyor mahsulotni omborga o'tkazish</h4>
               <p className="text-sm text-slate-500 mt-1">WMS ga kirim qilish</p>
             </Card>
-            <Card className="flex flex-col items-center justify-center p-6 text-center hover:bg-slate-50 cursor-pointer transition-colors border-dashed border-2">
+            <Card
+              className="flex flex-col items-center justify-center p-6 text-center hover:bg-slate-50 cursor-pointer transition-colors border-dashed border-2"
+              role="button"
+              tabIndex={0}
+              onClick={() => notifyPlannedFeature('Retseptura (texkarta)')}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  notifyPlannedFeature('Retseptura (texkarta)');
+                }
+              }}
+            >
               <div className="h-12 w-12 bg-emerald-50 rounded-full flex items-center justify-center mb-3">
                 <Settings className="h-6 w-6 text-emerald-600" />
               </div>
@@ -103,23 +156,32 @@ export default function ProductionDashboard() {
               <BarChart3 className="h-5 w-5 text-emerald-600" /> Xomashyo qoldig'i
             </h3>
             <div className="space-y-4">
-              {rawMaterials.map((material, i) => (
-                <div key={i} className="flex items-center justify-between p-3 border border-slate-100 rounded-lg">
-                  <div>
-                    <div className="font-medium text-slate-900 text-sm">{material.name}</div>
-                    <div className={`text-xs font-medium mt-1 ${
-                      material.status === 'Yaxshi' ? 'text-emerald-600' : 'text-amber-600'
-                    }`}>
-                      {material.status}
+              {rawMaterials.length === 0 ? (
+                <p className="text-sm text-slate-500">Xomashyo qoldiqlari hozircha ko‘rsatilmaydi.</p>
+              ) : (
+                rawMaterials.map((material, i) => (
+                  <div key={i} className="flex items-center justify-between p-3 border border-slate-100 rounded-lg">
+                    <div>
+                      <div className="font-medium text-slate-900 text-sm">{material.name}</div>
+                      <div className={`text-xs font-medium mt-1 ${
+                        material.status === 'Yaxshi' ? 'text-emerald-600' : 'text-amber-600'
+                      }`}>
+                        {material.status}
+                      </div>
+                    </div>
+                    <div className="font-bold text-slate-900">
+                      {material.stock.toLocaleString()} <span className="text-xs text-slate-500 font-normal">{material.unit}</span>
                     </div>
                   </div>
-                  <div className="font-bold text-slate-900">
-                    {material.stock.toLocaleString()} <span className="text-xs text-slate-500 font-normal">{material.unit}</span>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
-            <Button variant="outline" className="w-full mt-4 gap-2 text-sm">
+            <Button
+              variant="outline"
+              className="w-full mt-4 gap-2 text-sm"
+              type="button"
+              onClick={() => notifyPlannedFeature('Xomashyo to‘liq ro‘yxati')}
+            >
               Barchasini ko'rish <ArrowRight className="h-4 w-4" />
             </Button>
           </Card>
@@ -127,7 +189,12 @@ export default function ProductionDashboard() {
           <Card className="bg-white/70 text-slate-900 border border-emerald-200/60">
             <h3 className="font-bold mb-2">Kunlik hisobot</h3>
             <p className="text-sm text-slate-400 mb-4">Bugungi ishlab chiqarilgan mahsulotlar va sarflangan xomashyo hisoboti.</p>
-            <Button variant="primary" className="w-full bg-emerald-500 hover:bg-emerald-600 border-none">
+            <Button
+              variant="primary"
+              className="w-full bg-emerald-500 hover:bg-emerald-600 border-none"
+              type="button"
+              onClick={() => notifyPlannedFeature('Kunlik ishlab chiqarish hisoboti')}
+            >
               Hisobotni yuklash
             </Button>
           </Card>

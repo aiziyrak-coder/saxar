@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Factory, Package, LogOut, Menu, Bell } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { NotificationPanel } from '../components/platform/NotificationPanel';
 
 const navItems = [
   { path: '/production/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -14,6 +15,7 @@ export default function ProductionLayout() {
   const navigate = useNavigate();
   const { userData, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [notifOpen, setNotifOpen] = useState(false);
 
   const handleLogout = async () => {
     try {
@@ -74,7 +76,12 @@ export default function ProductionLayout() {
             {navItems.find(i => i.path === location.pathname)?.label || 'Ishlab chiqarish'}
           </h1>
           <div className="flex items-center gap-4">
-            <button className="p-2 text-slate-600 hover:text-slate-900 relative transition-colors">
+            <button
+              type="button"
+              className="p-2 text-slate-600 hover:text-slate-900 relative transition-colors"
+              onClick={() => setNotifOpen(true)}
+              aria-label="Bildirishnomalar"
+            >
               <Bell className="h-5 w-5" />
             </button>
             <div className="h-8 w-8 bg-emerald-500/15 rounded-full flex items-center justify-center text-emerald-700 font-bold shadow-sm border border-emerald-500/20">
@@ -86,6 +93,7 @@ export default function ProductionLayout() {
           <Outlet />
         </main>
       </div>
+      <NotificationPanel open={notifOpen} onClose={() => setNotifOpen(false)} />
     </div>
   );
 }

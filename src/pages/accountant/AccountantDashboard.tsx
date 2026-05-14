@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Card } from '../../components/ui/Card';
 import { Wallet, FileText, Receipt, Users, TrendingUp, BarChart3 } from 'lucide-react';
-import { getDashboardStats, getPLSummary } from '../../services/dashboard';
+import { getDashboardStats, getPLSummary, emptyDashboardStats } from '../../services/dashboard';
+import type { DashboardStats } from '../../types';
 
 export default function AccountantDashboard() {
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
   const [pl, setPl] = useState<{ revenue: number; expenses: number; profit: number } | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -13,12 +14,26 @@ export default function AccountantDashboard() {
     start.setDate(1);
     const startStr = start.toISOString().split('T')[0];
     const endStr = new Date().toISOString().split('T')[0];
-    Promise.all([getDashboardStats(), getPLSummary(startStr, endStr)])
-      .then(([s, p]) => {
-        setStats(s);
-        setPl(p);
-      })
-      .finally(() => setLoading(false));
+    let cancelled = false;
+    (async () => {
+      try {
+        const [s, p] = await Promise.all([getDashboardStats(), getPLSummary(startStr, endStr)]);
+        if (!cancelled) {
+          setStats(s);
+          setPl(p);
+        }
+      } catch {
+        if (!cancelled) {
+          setStats(emptyDashboardStats());
+          setPl({ revenue: 0, expenses: 0, profit: 0 });
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const formatCurrency = (n: number) => new Intl.NumberFormat('uz-UZ', { style: 'currency', currency: 'UZS', maximumFractionDigits: 0 }).format(n || 0);

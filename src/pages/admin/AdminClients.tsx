@@ -4,10 +4,11 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Search, Plus, MapPin, Phone, Building2, CheckCircle2, AlertCircle, Loader2, XCircle } from 'lucide-react';
 import { collection, getDocs, query, orderBy, limit, doc, updateDoc } from 'firebase/firestore';
-import { getFirebaseDb } from '../../firebase';
+import { tryGetFirebaseDb } from '../../firebase';
 import { useAuth } from '../../context/AuthContext';
 import { getClientBalance } from '../../services/firestore';
 import { logAudit, AuditActions, EntityTypes } from '../../services/audit';
+import { notifyPlannedFeature } from '../../platform/notifications';
 import type { Client } from '../../types';
 
 export default function AdminClients() {
@@ -19,8 +20,15 @@ export default function AdminClients() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   useEffect(() => {
+    const db = tryGetFirebaseDb();
+    if (!db) {
+      setClients([]);
+      setBalances({});
+      setLoading(false);
+      return;
+    }
     const q = query(
-      collection(getFirebaseDb(), 'clients'),
+      collection(db, 'clients'),
       orderBy('createdAt', 'desc'),
       limit(200)
     );
@@ -38,14 +46,16 @@ export default function AdminClients() {
   }, []);
 
   const handleApprove = async (client: Client) => {
+    const db = tryGetFirebaseDb();
+    if (!db) return;
     setActionLoading(client.id);
     try {
-      await updateDoc(doc(getFirebaseDb(), 'clients', client.id), {
+      await updateDoc(doc(db, 'clients', client.id), {
         registrationStatus: 'approved',
         status: 'active',
         updatedAt: new Date().toISOString(),
       });
-      await updateDoc(doc(getFirebaseDb(), 'users', client.id), {
+      await updateDoc(doc(db, 'users', client.id), {
         status: 'active',
         updatedAt: new Date().toISOString(),
       });
@@ -61,14 +71,16 @@ export default function AdminClients() {
   };
 
   const handleReject = async (client: Client) => {
+    const db = tryGetFirebaseDb();
+    if (!db) return;
     setActionLoading(client.id);
     try {
-      await updateDoc(doc(getFirebaseDb(), 'clients', client.id), {
+      await updateDoc(doc(db, 'clients', client.id), {
         registrationStatus: 'rejected',
         status: 'inactive',
         updatedAt: new Date().toISOString(),
       });
-      await updateDoc(doc(getFirebaseDb(), 'users', client.id), {
+      await updateDoc(doc(db, 'users', client.id), {
         status: 'inactive',
         updatedAt: new Date().toISOString(),
       });
@@ -109,7 +121,12 @@ export default function AdminClients() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-2xl font-bold text-slate-900">Mijozlar (B2B)</h1>
-        <Button variant="primary" className="gap-2">
+        <Button
+          variant="primary"
+          className="gap-2"
+          type="button"
+          onClick={() => notifyPlannedFeature('Yangi mijoz', 'Qo‘lda mijoz qo‘shish rejada.')}
+        >
           <Plus className="h-4 w-4" /> Yangi mijoz
         </Button>
       </div>
@@ -196,7 +213,14 @@ export default function AdminClients() {
                         </div>
                       )}
                       {client.registrationStatus !== 'pending' && (
-                        <Button variant="ghost" size="sm">Batafsil</Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          type="button"
+                          onClick={() => notifyPlannedFeature('Mijoz kartasi', client.name || client.id)}
+                        >
+                          Batafsil
+                        </Button>
                       )}
                     </td>
                   </tr>

@@ -3,6 +3,7 @@ import { Button } from '../../components/ui/Button';
 import { Truck, LogOut, Settings, Phone, ShieldCheck, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { notifyPlannedFeature } from '../../platform/notifications';
 
 export default function DriverProfile() {
   const navigate = useNavigate();
@@ -96,7 +97,12 @@ export default function DriverProfile() {
 
       {/* Actions */}
       <div className="space-y-3">
-        <Button variant="outline" className="w-full justify-start gap-3 h-12">
+        <Button
+          variant="outline"
+          className="w-full justify-start gap-3 h-12"
+          type="button"
+          onClick={() => notifyPlannedFeature('Haydovchi sozlamalari')}
+        >
           <Settings className="h-5 w-5 text-slate-400" /> Sozlamalar
         </Button>
         <Button variant="danger" className="w-full justify-start gap-3 h-12" onClick={handleLogout}>

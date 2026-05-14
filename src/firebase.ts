@@ -29,35 +29,67 @@ export function isFirebaseConfigured(): boolean {
   return true;
 }
 
-function ensureFirebaseApp(): FirebaseApp {
+function tryEnsureFirebaseApp(): FirebaseApp | null {
+  if (!isFirebaseConfigured()) return null;
+  if (app) return app;
+  try {
+    const existing = getApps()[0];
+    app = existing || initializeApp(firebaseConfig);
+    return app;
+  } catch (e) {
+    console.warn('[firebase] initializeApp failed', e);
+    return null;
+  }
+}
+
+/**
+ * Firestore ni xavfsiz olish: demo / placeholder sozlamada yoki init xatoda throw qilmaydi (null qaytaradi).
+ * UI va servislar shu orqali offline rejimda yiqilmasin.
+ */
+export function tryGetFirebaseDb(): Firestore | null {
+  if (!isFirebaseConfigured()) return null;
+  if (dbInstance) return dbInstance;
+  const firebaseApp = tryEnsureFirebaseApp();
+  if (!firebaseApp) return null;
+  try {
+    const cfg = firebaseConfig as FirebasePublicConfig;
+    const dbId = String(cfg.firestoreDatabaseId || '').trim();
+    dbInstance = dbId ? getFirestore(firebaseApp, dbId) : getFirestore(firebaseApp);
+    return dbInstance;
+  } catch (e) {
+    console.warn('[firebase] getFirestore failed', e);
+    return null;
+  }
+}
+
+/** Lazily initializes Firebase Auth only when the project is configured (avoids Identity Toolkit iframe on demo). */
+export function getFirebaseAuth(): Auth {
   if (!isFirebaseConfigured()) {
     throw new Error(
       'Firebase is not configured (missing or placeholder API key). Use demo login or set firebase-applet-config.json.'
     );
   }
-  if (app) return app;
-  const existing = getApps()[0];
-  if (existing) {
-    app = existing;
-    return app;
-  }
-  app = initializeApp(firebaseConfig);
-  return app;
-}
-
-/** Lazily initializes Firebase Auth only when the project is configured (avoids Identity Toolkit iframe on demo). */
-export function getFirebaseAuth(): Auth {
   if (authInstance) return authInstance;
-  authInstance = getAuth(ensureFirebaseApp());
+  const firebaseApp = tryEnsureFirebaseApp();
+  if (!firebaseApp) {
+    throw new Error(
+      'Firebase is not configured (missing or placeholder API key). Use demo login or set firebase-applet-config.json.'
+    );
+  }
+  authInstance = getAuth(firebaseApp);
   return authInstance;
 }
 
-/** Lazily initializes Firestore only when the project is configured. */
+/**
+ * Firestore (majburiy): faqat Firebase aniq kerak bo‘lgan joylarda (masalan, Login dan keyin).
+ * Demo uchun ma’lumot olishda `tryGetFirebaseDb` dan foydalaning.
+ */
 export function getFirebaseDb(): Firestore {
-  if (dbInstance) return dbInstance;
-  const cfg = firebaseConfig as FirebasePublicConfig;
-  const dbId = String(cfg.firestoreDatabaseId || '').trim();
-  const firebaseApp = ensureFirebaseApp();
-  dbInstance = dbId ? getFirestore(firebaseApp, dbId) : getFirestore(firebaseApp);
-  return dbInstance;
+  const db = tryGetFirebaseDb();
+  if (!db) {
+    throw new Error(
+      'Firebase is not configured (missing or placeholder API key). Use demo login or set firebase-applet-config.json.'
+    );
+  }
+  return db;
 }

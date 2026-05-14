@@ -16,7 +16,7 @@ const config = {
   soliqApiUrl: import.meta.env.VITE_SOLIQ_API_URL || 'https://api.soliq.uz',
 };
 
-/** SMS yuborish (Eskiz.uz / Playmobile) - placeholder */
+/** SMS yuborish (Eskiz.uz / Playmobile) — boshqa modullar uchun; ro‘yxatdan o‘tishda ishlatilmaydi */
 export async function sendSms(phone: string, text: string): Promise<boolean> {
   const normalized = phone.replace(/\D/g, '').replace(/^8/, '998');
   if (normalized.length < 9) return false;
@@ -33,12 +33,9 @@ export async function sendSms(phone: string, text: string): Promise<boolean> {
   }
 }
 
-/** Ro'yxatdan o'tish uchun SMS tasdiq kodi yuborish */
-export async function sendVerificationCode(phone: string): Promise<{ success: boolean; code?: string }> {
-  const code = Math.floor(100000 + Math.random() * 900000).toString();
-  const ok = await sendSms(phone, `Saxar ERP tasdiqlash kodi: ${code}`);
-  if (import.meta.env.DEV) return { success: true, code };
-  return { success: ok };
+/** Ro‘yxatdan o‘tish: SMS orqali kod yuborish o‘chirilgan — faqat muvaffaqiyat qaytariladi */
+export async function sendVerificationCode(_phone: string): Promise<{ success: boolean; code?: string }> {
+  return { success: true };
 }
 
 /** To'lov (Payme/Click/Uzum) - placeholder. B2B mijoz qarzini to'lashi uchun */

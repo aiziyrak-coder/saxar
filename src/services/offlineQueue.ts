@@ -1,3 +1,7 @@
+import { orderService, agentCheckInService, paymentService } from './firestore';
+import { isFirebaseConfigured } from '../firebase';
+import type { AgentCheckIn, Order, Payment } from '../types';
+
 const STORAGE_KEY = 'saxar_offline_queue';
 const LEGACY_QUEUE_KEY = 'sahar_offline_queue';
 
@@ -63,24 +67,27 @@ export function clearProcessed(processedIds: string[]): void {
 /** Sync queued items to Firestore when online. Call from app when online. */
 export async function processQueue(): Promise<{ synced: number; failed: string[] }> {
   if (typeof navigator !== 'undefined' && !navigator.onLine) return { synced: 0, failed: [] };
+  if (!isFirebaseConfigured()) return { synced: 0, failed: [] };
   const queue = getQueue();
   if (queue.length === 0) return { synced: 0, failed: [] };
 
-  const { orderService, agentCheckInService, paymentService } = await import('./firestore');
   const processed: string[] = [];
   const failed: string[] = [];
 
   for (const item of queue) {
     try {
       if (item.type === 'order') {
-        await orderService.create(item.payload as any);
-        processed.push(item.id);
+        const id = await orderService.create(item.payload as Omit<Order, 'id'>);
+        if (id) processed.push(item.id);
+        else failed.push(item.id);
       } else if (item.type === 'check_in') {
-        await agentCheckInService.create(item.payload as any);
-        processed.push(item.id);
+        const id = await agentCheckInService.create(item.payload as Omit<AgentCheckIn, 'id'>);
+        if (id) processed.push(item.id);
+        else failed.push(item.id);
       } else if (item.type === 'payment') {
-        await paymentService.create(item.payload as any);
-        processed.push(item.id);
+        const id = await paymentService.create(item.payload as Omit<Payment, 'id'>);
+        if (id) processed.push(item.id);
+        else failed.push(item.id);
       }
     } catch (e) {
       console.error('Offline queue item failed', item.id, e);

@@ -3,29 +3,34 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Search, Plus, Play, CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
+import { notifyPlannedFeature } from '../../platform/notifications';
 
 export default function AdminProduction() {
   const [search, setSearch] = useState('');
 
-  const productionOrders = [
-    { id: 'PROD-001', product: 'Premium Un 50kg', quantity: 100, unit: 'qop', status: 'Jarayonda', progress: 65, startDate: '15 Mar 2026', endDate: '16 Mar 2026' },
-    { id: 'PROD-002', product: 'O\'simlik yog\'i 5L', quantity: 500, unit: 'dona', status: 'Kutilmoqda', progress: 0, startDate: '16 Mar 2026', endDate: '17 Mar 2026' },
-    { id: 'PROD-003', product: 'Makaron 10kg', quantity: 200, unit: 'qop', status: 'Yakunlandi', progress: 100, startDate: '14 Mar 2026', endDate: '15 Mar 2026' },
-    { id: 'PROD-004', product: 'Shakar 50kg (Qadoqlash)', quantity: 50, unit: 'qop', status: 'Muammo', progress: 30, startDate: '15 Mar 2026', endDate: '15 Mar 2026' },
-  ];
+  const productionOrders: {
+    id: string;
+    product: string;
+    quantity: number;
+    unit: string;
+    status: string;
+    progress: number;
+    startDate: string;
+    endDate: string;
+  }[] = [];
 
-  const rawMaterials = [
-    { name: 'Bug\'doy (1-nav)', stock: 15000, unit: 'kg', status: 'Yaxshi' },
-    { name: 'Kungaboqar urug\'i', stock: 8000, unit: 'kg', status: 'Yaxshi' },
-    { name: 'Qadoq qoplari (50kg)', stock: 120, unit: 'dona', status: 'Kam qoldiq' },
-    { name: 'Yelim idish (5L)', stock: 5000, unit: 'dona', status: 'Yaxshi' },
-  ];
+  const rawMaterials: { name: string; stock: number; unit: string; status: string }[] = [];
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-2xl font-bold text-slate-900">Ishlab chiqarish</h1>
-        <Button variant="primary" className="gap-2">
+        <Button
+          variant="primary"
+          className="gap-2"
+          type="button"
+          onClick={() => notifyPlannedFeature('Yangi ishlab chiqarish buyurtmasi')}
+        >
           <Plus className="h-4 w-4" /> Yangi buyurtma
         </Button>
       </div>
@@ -56,7 +61,14 @@ export default function AdminProduction() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {productionOrders.map((order, i) => (
+                {productionOrders.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-10 px-6 text-center text-slate-500">
+                      Namuna ishlab chiqarish qatorlari olib tashlangan. Ma’lumotlar Firestore ulanishi bilan to‘ldiriladi.
+                    </td>
+                  </tr>
+                ) : (
+                  productionOrders.map((order, i) => (
                   <tr key={i} className="hover:bg-slate-50 transition-colors">
                     <td className="py-4 px-6">
                       <div className="font-bold text-slate-900">{order.product}</div>
@@ -92,10 +104,18 @@ export default function AdminProduction() {
                       <div>Tug: {order.endDate}</div>
                     </td>
                     <td className="py-4 px-6 text-right">
-                      <Button variant="ghost" size="sm">Batafsil</Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        type="button"
+                        onClick={() => notifyPlannedFeature('Partiya tafsilotlari', `${order.id} — batafsil rejada.`)}
+                      >
+                        Batafsil
+                      </Button>
                     </td>
                   </tr>
-                ))}
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -105,21 +125,32 @@ export default function AdminProduction() {
           <Card>
             <h3 className="font-bold text-slate-900 mb-4">Xomashyo qoldig'i</h3>
             <div className="space-y-4">
-              {rawMaterials.map((material, i) => (
-                <div key={i} className="flex items-center justify-between border-b border-slate-100 pb-3 last:border-0 last:pb-0">
-                  <div>
-                    <div className="font-medium text-slate-900">{material.name}</div>
-                    <div className={`text-xs font-medium mt-0.5 ${material.status === 'Yaxshi' ? 'text-emerald-600' : 'text-amber-600'}`}>
-                      {material.status}
+              {rawMaterials.length === 0 ? (
+                <p className="text-sm text-slate-500">Xomashyo qoldiqlari hozircha ko‘rsatilmaydi.</p>
+              ) : (
+                rawMaterials.map((material, i) => (
+                  <div key={i} className="flex items-center justify-between border-b border-slate-100 pb-3 last:border-0 last:pb-0">
+                    <div>
+                      <div className="font-medium text-slate-900">{material.name}</div>
+                      <div className={`text-xs font-medium mt-0.5 ${material.status === 'Yaxshi' ? 'text-emerald-600' : 'text-amber-600'}`}>
+                        {material.status}
+                      </div>
+                    </div>
+                    <div className="font-bold text-slate-900">
+                      {material.stock.toLocaleString()} <span className="text-slate-500 text-sm font-normal">{material.unit}</span>
                     </div>
                   </div>
-                  <div className="font-bold text-slate-900">
-                    {material.stock.toLocaleString()} <span className="text-slate-500 text-sm font-normal">{material.unit}</span>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
-            <Button variant="outline" className="w-full mt-4">Barcha xomashyolar</Button>
+            <Button
+              variant="outline"
+              className="w-full mt-4"
+              type="button"
+              onClick={() => notifyPlannedFeature('Xomashyo katalogi')}
+            >
+              Barcha xomashyolar
+            </Button>
           </Card>
 
           <Card className="bg-emerald-50 border-emerald-100">
@@ -127,7 +158,12 @@ export default function AdminProduction() {
             <p className="text-sm text-emerald-700 mb-4">
               Mahsulotlar tarkibi va ishlab chiqarish normalarini boshqarish.
             </p>
-            <Button variant="primary" className="w-full bg-emerald-600 hover:bg-emerald-700">
+            <Button
+              variant="primary"
+              className="w-full bg-emerald-600 hover:bg-emerald-700"
+              type="button"
+              onClick={() => notifyPlannedFeature('Retseptura (BOM)')}
+            >
               Retseptlarni ko'rish
             </Button>
           </Card>

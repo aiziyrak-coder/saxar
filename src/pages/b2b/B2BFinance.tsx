@@ -3,8 +3,12 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Download, FileText, Wallet, TrendingDown, Loader2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { orderApi, paymentApi } from '../../services/api';
 import { getClientBalance, getPaymentsByClient, getOrdersByClient } from '../../services/firestore';
-import type { Payment } from '../../types';
+import { mapApiOrderRowToOrder, mapApiPaymentRowToPayment } from '../../services/b2bFromApi';
+import { logger } from '../../services/logger';
+import { notifyPlannedFeature } from '../../platform/notifications';
+import type { Order, Payment } from '../../types';
 
 interface TrxRow {
   id: string;
@@ -12,6 +16,32 @@ interface TrxRow {
   type: string;
   amount: number;
   balance: number;
+}
+
+function buildTrxRows(orders: Order[], payments: Payment[]): TrxRow[] {
+  const orderRows: TrxRow[] = orders.map((o) => ({
+    id: o.orderNumber,
+    date: o.orderDate,
+    type: 'Buyurtma',
+    amount: -o.totalAmount,
+    balance: 0,
+  }));
+  const paymentRows: TrxRow[] = payments.map((p) => ({
+    id: p.referenceNumber || p.id.slice(0, 8),
+    date: p.createdAt.slice(0, 10),
+    type: 'To\'lov',
+    amount: p.amount,
+    balance: 0,
+  }));
+  const combined = [...orderRows, ...paymentRows].sort(
+    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+  ).slice(0, 50);
+  let run = 0;
+  combined.forEach((t) => {
+    run += t.amount;
+    t.balance = run;
+  });
+  return combined;
 }
 
 export default function B2BFinance() {
@@ -22,38 +52,65 @@ export default function B2BFinance() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user?.uid) return;
-    Promise.all([
-      getClientBalance(user.uid),
-      getPaymentsByClient(user.uid),
-      getOrdersByClient(user.uid, 100),
-    ]).then(([bal, payments, orders]) => {
-      setBalance(bal);
-      if (payments.length > 0) setLastPayment(payments[0]);
-      const orderRows: TrxRow[] = orders.map(o => ({
-        id: o.orderNumber,
-        date: o.orderDate,
-        type: 'Buyurtma',
-        amount: -o.totalAmount,
-        balance: 0,
-      }));
-      const paymentRows: TrxRow[] = payments.map(p => ({
-        id: p.referenceNumber || p.id.slice(0, 8),
-        date: p.createdAt.slice(0, 10),
-        type: 'To\'lov',
-        amount: p.amount,
-        balance: 0,
-      }));
-      const combined = [...orderRows, ...paymentRows].sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-      ).slice(0, 50);
-      let run = 0;
-      combined.forEach(t => {
-        run += t.amount;
-        t.balance = run;
-      });
-      setTransactions(combined);
-    }).finally(() => setLoading(false));
+    if (!user?.uid) {
+      setBalance(null);
+      setTransactions([]);
+      setLastPayment(null);
+      setLoading(false);
+      return;
+    }
+    const uid = user.uid;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const [orderRows, paymentRows] = await Promise.all([
+          orderApi.getAll(),
+          paymentApi.getAll(),
+        ]);
+        const orders = orderRows
+          .filter((o) => String(o.client) === uid)
+          .map(mapApiOrderRowToOrder);
+        const payments = paymentRows
+          .filter((p) => String(p.client) === uid)
+          .map(mapApiPaymentRowToPayment)
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        const totalOrders = orders.reduce((s, o) => s + o.totalAmount, 0);
+        const totalPayments = payments.reduce((s, p) => s + p.amount, 0);
+        const bal = totalOrders - totalPayments;
+        if (!cancelled) {
+          setBalance(bal);
+          setLastPayment(payments[0] ?? null);
+          setTransactions(buildTrxRows(orders, payments));
+        }
+      } catch (e) {
+        logger.warn('B2B finans: API xato, Firestore fallback', { detail: String(e) });
+        try {
+          const [bal, payments, orders] = await Promise.all([
+            getClientBalance(uid),
+            getPaymentsByClient(uid),
+            getOrdersByClient(uid, 100),
+          ]);
+          if (!cancelled) {
+            setBalance(bal);
+            setLastPayment(payments[0] ?? null);
+            setTransactions(buildTrxRows(orders, payments));
+          }
+        } catch {
+          if (!cancelled) {
+            setBalance(0);
+            setTransactions([]);
+            setLastPayment(null);
+          }
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [user?.uid]);
 
   const formatPrice = (n: number) => new Intl.NumberFormat('uz-UZ').format(n);
@@ -71,7 +128,12 @@ export default function B2BFinance() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-slate-900">Akt Sverka (O&apos;zaro hisob-kitob)</h1>
-        <Button variant="outline" className="gap-2">
+        <Button
+          variant="outline"
+          className="gap-2"
+          type="button"
+          onClick={() => notifyPlannedFeature('PDF akt sverka')}
+        >
           <Download className="h-4 w-4" /> PDF yuklab olish
         </Button>
       </div>
@@ -98,11 +160,39 @@ export default function B2BFinance() {
           </div>
           <div className="space-y-4">
             <div className="flex gap-2">
-              <Button variant="outline" className="flex-1">Payme</Button>
-              <Button variant="outline" className="flex-1">Click</Button>
-              <Button variant="outline" className="flex-1">Uzum Pay</Button>
+              <Button
+                variant="outline"
+                className="flex-1"
+                type="button"
+                onClick={() => notifyPlannedFeature('Payme')}
+              >
+                Payme
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1"
+                type="button"
+                onClick={() => notifyPlannedFeature('Click')}
+              >
+                Click
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1"
+                type="button"
+                onClick={() => notifyPlannedFeature('Uzum Pay')}
+              >
+                Uzum Pay
+              </Button>
             </div>
-            <Button variant="primary" className="w-full">To&apos;lovni amalga oshirish</Button>
+            <Button
+              variant="primary"
+              className="w-full"
+              type="button"
+              onClick={() => notifyPlannedFeature('Onlayn to‘lov')}
+            >
+              To&apos;lovni amalga oshirish
+            </Button>
           </div>
         </Card>
       </div>

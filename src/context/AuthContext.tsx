@@ -8,27 +8,11 @@ import React, {
 } from 'react';
 import { onAuthStateChanged, signOut as firebaseSignOut, type User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { getFirebaseAuth, getFirebaseDb, isFirebaseConfigured } from '../firebase';
+import { getFirebaseAuth, tryGetFirebaseDb, isFirebaseConfigured } from '../firebase';
 import type { User, UserRole } from '../types';
 import { clearDemoUserStorage, readDemoUserRaw } from '../constants/branding';
+import { parseUserRole } from '../constants/roles';
 import { clearApiSession, clearStoredAuthTokens } from '../services/api';
-
-const USER_ROLES: readonly UserRole[] = [
-  'admin',
-  'accountant',
-  'warehouse',
-  'agent',
-  'driver',
-  'b2b',
-  'production',
-];
-
-function parseUserRole(value: unknown): UserRole {
-  if (typeof value === 'string' && USER_ROLES.includes(value as UserRole)) {
-    return value as UserRole;
-  }
-  return 'b2b';
-}
 
 function parseUserStatus(value: unknown): User['status'] {
   if (value === 'active' || value === 'inactive' || value === 'pending') {
@@ -167,13 +151,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (firebaseUser) {
         clearDemoUserStorage();
         try {
-          const userDocRef = doc(getFirebaseDb(), 'users', firebaseUser.uid);
-          const userDoc = await getDoc(userDocRef);
-          if (userDoc.exists()) {
-            const data = userDoc.data() as Record<string, unknown>;
-            applyUserSession(firestoreProfileToUser(firebaseUser, data, userDoc.id));
-          } else {
+          const db = tryGetFirebaseDb();
+          if (!db) {
             applyUserSession(minimalUserFromAuth(firebaseUser));
+          } else {
+            const userDocRef = doc(db, 'users', firebaseUser.uid);
+            const userDoc = await getDoc(userDocRef);
+            if (userDoc.exists()) {
+              const data = userDoc.data() as Record<string, unknown>;
+              applyUserSession(firestoreProfileToUser(firebaseUser, data, userDoc.id));
+            } else {
+              applyUserSession(minimalUserFromAuth(firebaseUser));
+            }
           }
         } catch {
           applyUserSession(minimalUserFromAuth(firebaseUser));

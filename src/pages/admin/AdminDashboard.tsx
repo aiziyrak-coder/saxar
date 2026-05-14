@@ -13,13 +13,32 @@ import {
   Clock
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { getDashboardStats, getSalesChartData, getTopAgents, getTopProducts, getSalesByRegion, getRecentOrders, getPendingApprovalsCount } from '../../services/dashboard';
-import type { DashboardStats, Order } from '../../types';
+import { getDashboardStats, getSalesChartData, getTopAgents, getTopProducts, getSalesByRegion, getRecentOrders, getPendingApprovalsCount, emptySalesChartData } from '../../services/dashboard';
+import type { DashboardStats, Order, OrderStatus } from '../../types';
+
+type SalesChartRow = { name: string; total: number };
+type TopAgentRow = { name: string; region: string; sales: number; orders: number };
+type BadgeVariant = 'default' | 'success' | 'warning' | 'error' | 'info' | 'neutral';
+
+const ORDER_STATUS_BADGE: Record<OrderStatus, { variant: BadgeVariant; label: string }> = {
+  pending: { variant: 'warning', label: 'Kutilmoqda' },
+  confirmed: { variant: 'info', label: 'Tasdiqlangan' },
+  picking: { variant: 'info', label: 'Yig\'ilmoqda' },
+  packed: { variant: 'info', label: 'Qadoqlangan' },
+  in_transit: { variant: 'info', label: 'Yo\'lda' },
+  delivered: { variant: 'success', label: 'Yetkazildi' },
+  cancelled: { variant: 'error', label: 'Bekor qilindi' },
+  returned: { variant: 'neutral', label: 'Qaytarilgan' },
+};
+
+function isOrderStatus(value: string): value is OrderStatus {
+  return Object.prototype.hasOwnProperty.call(ORDER_STATUS_BADGE, value);
+}
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [chartData, setChartData] = useState<any[]>([]);
-  const [topAgents, setTopAgents] = useState<any[]>([]);
+  const [chartData, setChartData] = useState<SalesChartRow[]>([]);
+  const [topAgents, setTopAgents] = useState<TopAgentRow[]>([]);
   const [topProducts, setTopProducts] = useState<{ name: string; sales: number; quantity: number }[]>([]);
   const [salesByRegion, setSalesByRegion] = useState<{ region: string; sales: number; orders: number; clients: number }[]>([]);
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
@@ -44,9 +63,10 @@ export default function AdminDashboard() {
       ]);
       
       setStats(statsData);
+      const series = chart.datasets[0]?.data ?? [];
       setChartData(chart.labels.map((label, i) => ({
         name: label,
-        total: chart.datasets[0].data[i],
+        total: series[i] ?? 0,
       })));
       setTopAgents(agents);
       setTopProducts(products);
@@ -55,6 +75,12 @@ export default function AdminDashboard() {
       setPendingApprovals(pending);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
+      const fallback = emptySalesChartData(30);
+      const series = fallback.datasets[0]?.data ?? [];
+      setChartData(fallback.labels.map((label, i) => ({
+        name: label,
+        total: series[i] ?? 0,
+      })));
     } finally {
       setLoading(false);
     }
@@ -69,17 +95,10 @@ export default function AdminDashboard() {
   };
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, any> = {
-      pending: { variant: 'warning', label: 'Kutilmoqda' },
-      confirmed: { variant: 'info', label: 'Tasdiqlangan' },
-      picking: { variant: 'info', label: 'Yig\'ilmoqda' },
-      packed: { variant: 'info', label: 'Qadoqlangan' },
-      in_transit: { variant: 'info', label: 'Yo\'lda' },
-      delivered: { variant: 'success', label: 'Yetkazildi' },
-      cancelled: { variant: 'error', label: 'Bekor qilindi' },
-    };
-    const config = variants[status] || { variant: 'neutral', label: status };
-    return <Badge variant={config.variant as any}>{config.label}</Badge>;
+    const config = isOrderStatus(status)
+      ? ORDER_STATUS_BADGE[status]
+      : { variant: 'neutral' as const, label: status };
+    return <Badge variant={config.variant}>{config.label}</Badge>;
   };
 
   const statCards = stats ? [
@@ -180,13 +199,13 @@ export default function AdminDashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Sales Chart */}
-        <Card className="lg:col-span-2">
+        <Card className="lg:col-span-2 min-w-0">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-bold text-slate-800">Savdo dinamikasi (30 kun)</h3>
             <Badge variant="success">+{((stats?.revenueChange || 0)).toFixed(1)}%</Badge>
           </div>
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-[300px] w-full min-w-0 min-h-[300px]">
+            <ResponsiveContainer width="100%" height={280}>
               <AreaChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">

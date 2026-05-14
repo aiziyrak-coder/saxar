@@ -27,8 +27,21 @@ export default function B2BLayout() {
               <Link to="/b2b/finance" className={`font-medium ${location.pathname.includes('finance') ? 'text-emerald-700' : 'text-slate-600 hover:text-emerald-700'}`}>Akt Sverka</Link>
             </nav>
             <div className="flex items-center gap-4">
-              <Link to="/b2b/cart" className="hidden md:inline-flex relative p-2 text-slate-600 hover:text-emerald-700 transition-colors">
+              <Link
+                to="/b2b/cart"
+                className={`hidden md:inline-flex relative rounded-full p-2 transition-colors ${
+                  location.pathname.includes('/cart')
+                    ? 'text-emerald-700 ring-2 ring-emerald-400/50 bg-emerald-50/80'
+                    : 'text-slate-600 hover:text-emerald-700'
+                }`}
+                aria-current={location.pathname.includes('/cart') ? 'page' : undefined}
+              >
                 <ShoppingCart className="h-6 w-6" />
+                {totalCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-0.5 text-[10px] font-bold text-white">
+                    {totalCount > 9 ? '9+' : totalCount}
+                  </span>
+                )}
               </Link>
               <Link to="/b2b/profile" className="p-2 text-slate-600 hover:text-emerald-700 transition-colors">
                 <User className="h-6 w-6" />
@@ -37,21 +50,31 @@ export default function B2BLayout() {
           </div>
         </div>
       </header>
-      {/* Floating Savatcha (scroll paytida ham ko'rinadi) */}
+      {/* Suzuvchi savatcha — kichik dumaloq FAB */}
       <Link
         to="/b2b/cart"
-        className="fixed bottom-24 sm:bottom-6 right-4 z-60 relative flex items-center justify-center gap-2
-                   w-12 h-12 sm:w-auto sm:px-4 rounded-2xl bg-white/70 backdrop-blur-2xl
-                   border border-emerald-200/60 shadow-[0_18px_60px_rgba(16,185,129,0.12)]
-                   hover:bg-white transition-colors"
+        title="Savatcha"
         aria-label="Savatcha"
+        aria-current={location.pathname.includes('/cart') ? 'page' : undefined}
+        className={`fixed z-[100] relative flex h-12 w-12 items-center justify-center rounded-full
+                   border bg-white/90 text-emerald-700 shadow-lg backdrop-blur-md
+                   transition-transform hover:scale-105 hover:bg-white hover:shadow-xl
+                   active:scale-95
+                   bottom-[max(1rem,env(safe-area-inset-bottom,0px))]
+                   right-[max(1rem,env(safe-area-inset-right,0px))]
+                   ${
+                     location.pathname.includes('/cart')
+                       ? 'border-emerald-500 ring-2 ring-emerald-400/60'
+                       : 'border-emerald-300/80'
+                   }`}
       >
-        <ShoppingCart className="h-6 w-6 text-emerald-700" />
-        <span className="hidden sm:inline text-sm font-semibold text-slate-900">Savatcha</span>
+        <ShoppingCart className="h-5 w-5 shrink-0" aria-hidden />
         {totalCount > 0 && (
-          <span className="absolute -top-2 -right-2 h-5 min-w-5 px-1 rounded-full bg-emerald-500 text-white text-[11px] font-bold
-                           flex items-center justify-center border-2 border-white/80">
-            {totalCount}
+          <span
+            className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-white bg-emerald-500 px-0.5 text-[10px] font-bold text-white shadow-sm"
+            aria-label={`${totalCount} ta mahsulot`}
+          >
+            {totalCount > 99 ? '99+' : totalCount}
           </span>
         )}
       </Link>

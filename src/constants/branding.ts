@@ -1,4 +1,5 @@
 import type { UserRole } from '../types';
+import { ROLE_HOME_PATHS } from './roles';
 
 /** Rasmiy sayt va kompaniya nomi */
 export const BRAND = {
@@ -6,9 +7,10 @@ export const BRAND = {
   siteHost: 'saxar.uz',
   siteUrl: 'https://saxar.uz',
   erpProductName: 'Saxar ERP',
-  tagline: "Sifatli go'sht va kolbasa mahsulotlari",
+  tagline: "Taza ta'm, ishonchli sifat — tabiiy xomashyodan dastingizgacha",
+  /** Qisqa brend xabari: hero, meta, umumiy kirish matni */
   description:
-    "Saxar — O'zbekistonda tabiiy xom asyo, zamonaviy texnologiya va sovuq zanjir bilan go'sht-kolbasa mahsulotlarini ishlab chiqarish va yetkazib berish.",
+    "Saxar O'zbekistonda go'sht-kolbasani tabiiy xomashyo va zamonaviy texnologiya bilan tayyorlaydi. Zavoddan tortib sizga yetkazguncha mahsulot sovuqda saqlanadi — yo'lda ham taza ta'm va xavfsizlik saqlanadi.",
 } as const;
 
 export const DEMO_USER_STORAGE_KEY = 'saxar_demo_user';
@@ -36,17 +38,19 @@ export function clearDemoUserStorage(): void {
 
 export const ERP_LOGIN_PATH = '/login';
 
-export const ROLE_ERP_HOME: Record<UserRole, string> = {
-  admin: '/admin',
-  accountant: '/accountant',
-  warehouse: '/warehouse',
-  agent: '/agent',
-  driver: '/driver',
-  b2b: '/b2b',
-  production: '/production',
-};
+/** @deprecated Yangi kodda `ROLE_HOME_PATHS` yoki `homePathForRole` (`constants/roles.ts`) ishlating */
+export const ROLE_ERP_HOME: Record<UserRole, string> = ROLE_HOME_PATHS;
 
 export function erpHomePathForRole(role: UserRole | undefined): string {
   if (!role) return ERP_LOGIN_PATH;
-  return ROLE_ERP_HOME[role] ?? ERP_LOGIN_PATH;
+  return ROLE_HOME_PATHS[role] ?? ERP_LOGIN_PATH;
+}
+
+/**
+ * `VITE_ALLOW_DEMO_LOGIN=false` (build vaqtida) — demo rol tugmalari va standart parol UI dan olib tashlanadi.
+ * Boshqa qiymat yoki bo‘sh — demo ruxsat (ishlab chiqarish / lokal Docker).
+ */
+export function isDemoLoginUiAllowed(): boolean {
+  const v = String(import.meta.env.VITE_ALLOW_DEMO_LOGIN ?? '').trim().toLowerCase();
+  return v !== 'false' && v !== '0' && v !== 'no';
 }

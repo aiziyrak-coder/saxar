@@ -128,6 +128,10 @@ export default function AgentOrder() {
       }
 
       const orderId = await orderService.create(order);
+      if (!orderId) {
+        alert('Buyurtma yaratilmadi. Firebase sozlanganini tekshiring.');
+        return;
+      }
       if (userData) {
         await logAudit(AuditActions.ORDER_CREATE, EntityTypes.ORDER, orderId, user.uid, userData.name || '', userData.role, undefined, { orderNumber: order.orderNumber, totalAmount, source: 'agent', clientId });
       }

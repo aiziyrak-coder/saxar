@@ -1,4 +1,4 @@
-import { getFirebaseDb } from '../firebase';
+import { tryGetFirebaseDb } from '../firebase';
 import {
   collection,
   doc,
@@ -13,8 +13,10 @@ import {
   limit,
   startAfter,
   writeBatch,
+  type Firestore,
   type QueryConstraint,
   type DocumentData,
+  type QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import type {
   User,
@@ -39,16 +41,18 @@ import type {
 export class FirestoreService<T extends DocumentData> {
   constructor(private collectionName: string) {}
 
-  private getCollectionRef() {
-    return collection(getFirebaseDb(), this.collectionName);
+  private collectionRef(db: Firestore) {
+    return collection(db, this.collectionName);
   }
 
-  private getDocRef(id: string) {
-    return doc(getFirebaseDb(), this.collectionName, id);
+  private docRef(db: Firestore, id: string) {
+    return doc(db, this.collectionName, id);
   }
 
   // Create
-  async create(data: Omit<T, 'id'>, customId?: string): Promise<string> {
+  async create(data: Omit<T, 'id'>, customId?: string): Promise<string | null> {
+    const db = tryGetFirebaseDb();
+    if (!db) return null;
     const timestamp = new Date().toISOString();
     const dataWithTimestamps = {
       ...data,
@@ -57,45 +61,55 @@ export class FirestoreService<T extends DocumentData> {
     };
 
     if (customId) {
-      await updateDoc(this.getDocRef(customId), dataWithTimestamps);
+      await updateDoc(this.docRef(db, customId), dataWithTimestamps);
       return customId;
     } else {
-      const docRef = await addDoc(this.getCollectionRef(), dataWithTimestamps);
+      const docRef = await addDoc(this.collectionRef(db), dataWithTimestamps);
       return docRef.id;
     }
   }
 
   // Read
   async getById(id: string): Promise<T | null> {
-    const docSnap = await getDoc(this.getDocRef(id));
+    const db = tryGetFirebaseDb();
+    if (!db) return null;
+    const docSnap = await getDoc(this.docRef(db, id));
     if (!docSnap.exists()) return null;
     return { id: docSnap.id, ...docSnap.data() } as unknown as T;
   }
 
   // Update
   async update(id: string, data: Partial<T>): Promise<void> {
+    const db = tryGetFirebaseDb();
+    if (!db) return;
     const updateData = {
       ...data,
       updatedAt: new Date().toISOString(),
     };
-    await updateDoc(this.getDocRef(id), updateData);
+    await updateDoc(this.docRef(db, id), updateData);
   }
 
   // Delete
   async delete(id: string): Promise<void> {
-    await deleteDoc(this.getDocRef(id));
+    const db = tryGetFirebaseDb();
+    if (!db) return;
+    await deleteDoc(this.docRef(db, id));
   }
 
   // Query
   async query(constraints: QueryConstraint[]): Promise<T[]> {
-    const q = query(this.getCollectionRef(), ...constraints);
+    const db = tryGetFirebaseDb();
+    if (!db) return [];
+    const q = query(this.collectionRef(db), ...constraints);
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as unknown as T);
   }
 
   // Get all
   async getAll(orderByField: string = 'createdAt', direction: 'asc' | 'desc' = 'desc'): Promise<T[]> {
-    const q = query(this.getCollectionRef(), orderBy(orderByField, direction));
+    const db = tryGetFirebaseDb();
+    if (!db) return [];
+    const q = query(this.collectionRef(db), orderBy(orderByField, direction));
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as unknown as T);
   }
@@ -103,17 +117,21 @@ export class FirestoreService<T extends DocumentData> {
   // Paginated query
   async getPaginated(
     pageSize: number,
-    lastDoc: any = null,
+    lastDoc: QueryDocumentSnapshot<DocumentData> | null = null,
     orderByField: string = 'createdAt',
     direction: 'asc' | 'desc' = 'desc'
-  ): Promise<{ items: T[]; lastDoc: any }> {
+  ): Promise<{ items: T[]; lastDoc: QueryDocumentSnapshot<DocumentData> | null }> {
+    const db = tryGetFirebaseDb();
+    if (!db) {
+      return { items: [], lastDoc: null };
+    }
     const constraints: QueryConstraint[] = [orderBy(orderByField, direction), limit(pageSize)];
     
     if (lastDoc) {
       constraints.push(startAfter(lastDoc));
     }
 
-    const q = query(this.getCollectionRef(), ...constraints);
+    const q = query(this.collectionRef(db), ...constraints);
     const querySnapshot = await getDocs(q);
     
     const items = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as unknown as T);
@@ -143,13 +161,15 @@ export const payrollService = new FirestoreService<PayrollItem>('payroll_items')
 
 // ==================== BATCH OPERATIONS ====================
 
-export async function runBatch<T extends Record<string, any>>(
+export async function runBatch<T extends DocumentData>(
   operations: { type: 'create' | 'update' | 'delete'; collection: string; id?: string; data?: T }[]
 ): Promise<void> {
-  const batch = writeBatch(getFirebaseDb());
+  const db = tryGetFirebaseDb();
+  if (!db || operations.length === 0) return;
+  const batch = writeBatch(db);
 
   for (const op of operations) {
-    const collectionRef = collection(getFirebaseDb(), op.collection);
+    const collectionRef = collection(db, op.collection);
     
     switch (op.type) {
       case 'create':
@@ -180,8 +200,10 @@ export async function runBatch<T extends Record<string, any>>(
 
 // Get clients by agent (agentga biriktirilgan do'konlar)
 export async function getClientsByAgentId(agentId: string): Promise<Client[]> {
+  const db = tryGetFirebaseDb();
+  if (!db) return [];
   const q = query(
-    collection(getFirebaseDb(), 'clients'),
+    collection(db, 'clients'),
     where('agentId', '==', agentId),
     limit(500)
   );
@@ -193,8 +215,10 @@ export async function getClientsByAgentId(agentId: string): Promise<Client[]> {
 
 // Get orders by client
 export async function getOrdersByClient(clientId: string, limitCount: number = 50): Promise<Order[]> {
+  const db = tryGetFirebaseDb();
+  if (!db) return [];
   const q = query(
-    collection(getFirebaseDb(), 'orders'),
+    collection(db, 'orders'),
     where('clientId', '==', clientId),
     limit(limitCount * 2)
   );
@@ -206,8 +230,10 @@ export async function getOrdersByClient(clientId: string, limitCount: number = 5
 
 // Get orders by status
 export async function getOrdersByStatus(status: string, limitCount: number = 100): Promise<Order[]> {
+  const db = tryGetFirebaseDb();
+  if (!db) return [];
   const q = query(
-    collection(getFirebaseDb(), 'orders'),
+    collection(db, 'orders'),
     where('status', '==', status),
     orderBy('createdAt', 'desc'),
     limit(limitCount)
@@ -218,8 +244,10 @@ export async function getOrdersByStatus(status: string, limitCount: number = 100
 
 // Get orders by multiple statuses (in-memory filter to avoid composite index)
 export async function getOrdersByStatuses(statuses: string[], limitCount: number = 100): Promise<Order[]> {
+  const db = tryGetFirebaseDb();
+  if (!db) return [];
   const q = query(
-    collection(getFirebaseDb(), 'orders'),
+    collection(db, 'orders'),
     orderBy('createdAt', 'desc'),
     limit(limitCount * 2)
   );
@@ -233,8 +261,10 @@ export async function getOrdersByStatuses(statuses: string[], limitCount: number
 
 // Get inventory by product
 export async function getInventoryByProduct(productId: string): Promise<InventoryItem[]> {
+  const db = tryGetFirebaseDb();
+  if (!db) return [];
   const q = query(
-    collection(getFirebaseDb(), 'inventory'),
+    collection(db, 'inventory'),
     where('productId', '==', productId),
     where('status', '==', 'available'),
     orderBy('expiryDate', 'asc')
@@ -245,11 +275,13 @@ export async function getInventoryByProduct(productId: string): Promise<Inventor
 
 // Get expiring inventory
 export async function getExpiringInventory(days: number = 7): Promise<InventoryItem[]> {
+  const db = tryGetFirebaseDb();
+  if (!db) return [];
   const expiryDate = new Date();
   expiryDate.setDate(expiryDate.getDate() + days);
   
   const q = query(
-    collection(getFirebaseDb(), 'inventory'),
+    collection(db, 'inventory'),
     where('expiryDate', '<=', expiryDate.toISOString()),
     where('status', '==', 'available'),
     orderBy('expiryDate', 'asc')
@@ -260,9 +292,11 @@ export async function getExpiringInventory(days: number = 7): Promise<InventoryI
 
 // Get low stock products
 export async function getLowStockProducts(): Promise<InventoryItem[]> {
+  const db = tryGetFirebaseDb();
+  if (!db) return [];
   // This requires aggregation query
   const q = query(
-    collection(getFirebaseDb(), 'inventory'),
+    collection(db, 'inventory'),
     where('status', '==', 'available')
   );
   const snapshot = await getDocs(q);
@@ -286,8 +320,10 @@ export async function getLowStockProducts(): Promise<InventoryItem[]> {
 
 // Get payments by client (for Akt sverka / history)
 export async function getPaymentsByClient(clientId: string, limitCount: number = 50): Promise<Payment[]> {
+  const db = tryGetFirebaseDb();
+  if (!db) return [];
   const q = query(
-    collection(getFirebaseDb(), 'payments'),
+    collection(db, 'payments'),
     where('clientId', '==', clientId),
     limit(limitCount * 2)
   );
@@ -299,9 +335,11 @@ export async function getPaymentsByClient(clientId: string, limitCount: number =
 
 // Get client balance (orders total - payments total)
 export async function getClientBalance(clientId: string): Promise<number> {
+  const db = tryGetFirebaseDb();
+  if (!db) return 0;
   // Get all orders for client
   const ordersQuery = query(
-    collection(getFirebaseDb(), 'orders'),
+    collection(db, 'orders'),
     where('clientId', '==', clientId)
   );
   const ordersSnap = await getDocs(ordersQuery);
@@ -309,7 +347,7 @@ export async function getClientBalance(clientId: string): Promise<number> {
 
   // Get all payments for client
   const paymentsQuery = query(
-    collection(getFirebaseDb(), 'payments'),
+    collection(db, 'payments'),
     where('clientId', '==', clientId),
     where('direction', '==', 'in')
   );
@@ -321,8 +359,10 @@ export async function getClientBalance(clientId: string): Promise<number> {
 
 // Get KPI by agent and period
 export async function getKPIByAgentAndPeriod(agentId: string, period: string): Promise<KPIRecord | null> {
+  const db = tryGetFirebaseDb();
+  if (!db) return null;
   const q = query(
-    collection(getFirebaseDb(), 'kpi_records'),
+    collection(db, 'kpi_records'),
     where('agentId', '==', agentId),
     where('period', '==', period),
     limit(1)
@@ -344,9 +384,13 @@ export async function deductFIFO(
   createdBy: string,
   createdByName: string
 ): Promise<{ success: boolean; shortage?: number }> {
+  const db = tryGetFirebaseDb();
+  if (!db) {
+    return { success: false, shortage: quantity };
+  }
   const batches = await getInventoryByProduct(productId);
   let remaining = quantity;
-  const batch = writeBatch(getFirebaseDb());
+  const batch = writeBatch(db);
   const now = new Date().toISOString();
 
   for (const item of batches) {
@@ -355,7 +399,7 @@ export async function deductFIFO(
     if (take <= 0) continue;
     remaining -= take;
     const newQty = item.quantity - take;
-    batch.update(doc(getFirebaseDb(), 'inventory', item.id), {
+    batch.update(doc(db, 'inventory', item.id), {
       quantity: newQty,
       updatedAt: now,
     });
@@ -372,7 +416,7 @@ export async function deductFIFO(
       createdByName,
       createdAt: now,
     };
-    const txRef = doc(collection(getFirebaseDb(), 'inventory_transactions'));
+    const txRef = doc(collection(db, 'inventory_transactions'));
     batch.set(txRef, txData);
   }
 
@@ -397,11 +441,13 @@ export async function inventoryAdjustment(
   createdBy: string,
   createdByName: string
 ): Promise<void> {
+  const db = tryGetFirebaseDb();
+  if (!db) return;
   const diff = newQty - currentQty;
   if (diff === 0) return;
   const now = new Date().toISOString();
-  const batch = writeBatch(getFirebaseDb());
-  batch.update(doc(getFirebaseDb(), 'inventory', batchId), {
+  const batch = writeBatch(db);
+  batch.update(doc(db, 'inventory', batchId), {
     quantity: newQty,
     updatedAt: now,
   });
@@ -417,7 +463,7 @@ export async function inventoryAdjustment(
     createdByName,
     createdAt: now,
   };
-  const txRef = doc(collection(getFirebaseDb(), 'inventory_transactions'));
+  const txRef = doc(collection(db, 'inventory_transactions'));
   batch.set(txRef, txData);
   await batch.commit();
 }

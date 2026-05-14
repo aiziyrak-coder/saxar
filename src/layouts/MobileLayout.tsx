@@ -4,8 +4,13 @@ import { Home, MapPin, Wallet, User, Package } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { processQueue } from '../services/offlineQueue';
 import { logger } from '../services/logger';
+import type { UserRole } from '../types';
+import { roleSubPath } from '../constants/roles';
 
-export default function MobileLayout({ role }: { role: 'agent' | 'driver' }) {
+/** Mobil ilova faqat agent va haydovchi rollari uchun */
+export type MobileAppRole = Extract<UserRole, 'agent' | 'driver'>;
+
+export default function MobileLayout({ role }: { role: MobileAppRole }) {
   const location = useLocation();
   const { userData } = useAuth();
 
@@ -14,33 +19,39 @@ export default function MobileLayout({ role }: { role: 'agent' | 'driver' }) {
       processQueue().then(({ synced }) => {
         if (synced > 0) logger.info('Offline navbat sinxronlandi', { synced });
       });
-    sync();
+    void sync();
     window.addEventListener('online', sync);
     return () => window.removeEventListener('online', sync);
   }, []);
-  
-  const navItems = role === 'agent' ? [
-    { path: '/agent/dashboard', icon: Home, label: 'Asosiy' },
-    { path: '/agent/shops', icon: MapPin, label: 'Do\'konlar' },
-    { path: '/agent/finance', icon: Wallet, label: 'Kassa' },
-    { path: '/agent/profile', icon: User, label: 'Profil' },
-  ] : [
-    { path: '/driver/dashboard', icon: Home, label: 'Marshrut' },
-    { path: '/driver/inventory', icon: Package, label: 'Yuklar' },
-    { path: '/driver/finance', icon: Wallet, label: 'Pul yig\'ish' },
-    { path: '/driver/profile', icon: User, label: 'Profil' },
-  ];
 
-  const getInitials = (name: string, role: string) => {
-    if (!name) return role === 'agent' ? 'AG' : 'DR';
-    return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+  const navItems =
+    role === 'agent'
+      ? [
+          { path: roleSubPath('agent', 'dashboard'), icon: Home, label: 'Asosiy' },
+          { path: roleSubPath('agent', 'shops'), icon: MapPin, label: "Do'konlar" },
+          { path: roleSubPath('agent', 'finance'), icon: Wallet, label: 'Kassa' },
+          { path: roleSubPath('agent', 'profile'), icon: User, label: 'Profil' },
+        ]
+      : [
+          { path: roleSubPath('driver', 'dashboard'), icon: Home, label: 'Marshrut' },
+          { path: roleSubPath('driver', 'inventory'), icon: Package, label: "Yuklar" },
+          { path: roleSubPath('driver', 'finance'), icon: Wallet, label: "Pul yig'ish" },
+          { path: roleSubPath('driver', 'profile'), icon: User, label: 'Profil' },
+        ];
+
+  const getInitials = (name: string, appRole: MobileAppRole) => {
+    if (!name) return appRole === 'agent' ? 'AG' : 'DR';
+    return name
+      .split(' ')
+      .map((n) => n[0])
+      .join('')
+      .substring(0, 2)
+      .toUpperCase();
   };
 
   return (
     <div className="min-h-screen bg-emerald-50 text-slate-900">
-      {/* Mobile App Container */}
       <div className="w-full min-h-screen bg-white/75 shadow-[0_20px_80px_rgba(16,185,129,0.16)] border border-emerald-200/60 rounded-none relative flex flex-col overflow-hidden backdrop-blur-2xl">
-        {/* Header */}
         <header className="bg-white/70 text-slate-900 p-4 sticky top-0 z-50 border-b border-emerald-200/60 backdrop-blur-2xl">
           <div className="flex justify-between items-center">
             <h1 className="text-lg font-bold">
@@ -52,12 +63,10 @@ export default function MobileLayout({ role }: { role: 'agent' | 'driver' }) {
           </div>
         </header>
 
-        {/* Main Content Area */}
         <main className="flex-1 overflow-y-auto pb-20 px-4 pt-0">
           <Outlet />
         </main>
 
-        {/* Bottom Navigation */}
         <nav className="bg-white/70 border-t border-emerald-200/60 fixed bottom-0 left-0 w-full flex justify-around items-center h-16 pb-safe z-50 backdrop-blur-2xl rounded-none">
           {navItems.map((item) => {
             const isActive = location.pathname === item.path;

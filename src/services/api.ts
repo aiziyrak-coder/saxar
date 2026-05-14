@@ -264,12 +264,49 @@ export const productApi = {
   delete: (id: string) => api.delete<void>(`/products/${id}/`),
 };
 
+/** Django REST `sales.Order` list element (snake_case) */
+export interface ApiOrderRow {
+  id: number | string;
+  source?: string;
+  client?: number | string;
+  client_name?: string;
+  status?: string;
+  total_amount?: number | string;
+  paid_amount?: number | string;
+  order_date?: string;
+  created_at?: string;
+  items?: ApiOrderItemRow[];
+}
+
+export interface ApiOrderItemRow {
+  id?: number | string;
+  product?: number | string;
+  product_name?: string;
+  quantity?: number | string;
+  price?: number | string;
+  total?: number | string;
+}
+
+export interface ApiPaymentRow {
+  id: number | string;
+  client?: number | string;
+  amount?: number | string;
+  type?: string;
+  description?: string;
+  created_at?: string;
+  order?: number | string | null;
+}
+
 export const orderApi = {
-  getAll: () => api.get<Order[]>('/orders/'),
-  getById: (id: string) => api.get<Order>(`/orders/${id}/`),
+  getAll: () => api.get<ApiOrderRow[]>('/orders/'),
+  getById: (id: string) => api.get<ApiOrderRow>(`/orders/${id}/`),
   create: (data: Partial<Order>) => api.post<Order>('/orders/', data),
   update: (id: string, data: Partial<Order>) => api.patch<Order>(`/orders/${id}/`, data),
   delete: (id: string) => api.delete<void>(`/orders/${id}/`),
+};
+
+export const paymentApi = {
+  getAll: () => api.get<ApiPaymentRow[]>('/payments/'),
 };
 
 // ==================== TYPES ====================

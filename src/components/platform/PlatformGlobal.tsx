@@ -1,0 +1,82 @@
+import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import { CommandPalette, type CommandItem } from './CommandPalette';
+import { KeyboardShortcutsModal } from './KeyboardShortcutsModal';
+import { IdleSessionDialog } from './IdleSessionDialog';
+import { OfflineStrip } from './OfflineStrip';
+import { useIdleSession } from '../../platform/useIdleSession';
+import { useOnlineStatus } from '../../platform/useOnlineStatus';
+import { recordPageView } from '../../platform/localAnalytics';
+import { ROLE_HOME_PATHS, roleSubPath } from '../../constants/roles';
+
+const ADMIN_COMMANDS: CommandItem[] = [
+  { id: 'd', label: 'Dashboard', path: roleSubPath('admin', 'dashboard'), keywords: 'bosh' },
+  { id: 'o', label: 'Buyurtmalar', path: roleSubPath('admin', 'orders') },
+  { id: 'c', label: 'Mijozlar', path: roleSubPath('admin', 'clients') },
+  { id: 'w', label: 'Ombor WMS', path: roleSubPath('admin', 'wms') },
+  { id: 'f', label: 'Moliya', path: roleSubPath('admin', 'finance') },
+  { id: 'r', label: 'Hisobotlar', path: roleSubPath('admin', 'reports') },
+  { id: 's', label: 'Sozlamalar', path: roleSubPath('admin', 'settings') },
+  { id: 'p', label: 'Ishlab chiqarish', path: roleSubPath('admin', 'production') },
+  { id: 'a', label: 'Agentlar', path: roleSubPath('admin', 'agents') },
+  { id: 'l', label: 'Logistika', path: roleSubPath('admin', 'logistics') },
+  { id: 'x', label: 'Platform vositalari (20+)', path: roleSubPath('admin', 'workspace'), keywords: 'funksiya' },
+];
+
+const IDLE_MS = (() => {
+  const raw = Number(import.meta.env.VITE_IDLE_WARN_MS);
+  if (Number.isFinite(raw) && raw >= 60_000) return raw;
+  return 25 * 60 * 1000;
+})();
+
+export function PlatformGlobal() {
+  const location = useLocation();
+  const online = useOnlineStatus();
+  const { showWarning, continueSession } = useIdleSession({ warnAfterMs: IDLE_MS });
+  const [cmdOpen, setCmdOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+
+  useEffect(() => {
+    if (location.pathname.startsWith(ROLE_HOME_PATHS.admin)) recordPageView(location.pathname);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      const tag = t?.tagName;
+      const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t?.isContentEditable;
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setCmdOpen((v) => !v);
+        return;
+      }
+      if (e.key === '?' && !typing) {
+        e.preventDefault();
+        setHelpOpen(true);
+      }
+    };
+    const openCmd = () => setCmdOpen(true);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('saxar:open-command-palette', openCmd);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('saxar:open-command-palette', openCmd);
+    };
+  }, []);
+
+  const showAdminChrome = location.pathname.startsWith(ROLE_HOME_PATHS.admin);
+
+  return (
+    <>
+      <OfflineStrip online={online} />
+      {showAdminChrome && (
+        <>
+          <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} commands={ADMIN_COMMANDS} />
+          <KeyboardShortcutsModal open={helpOpen} onClose={() => setHelpOpen(false)} />
+        </>
+      )}
+      <IdleSessionDialog open={showWarning} onContinue={continueSession} />
+    </>
+  );
+}

@@ -1,9 +1,14 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Package, Clock, CheckCircle2, Truck, ChevronRight, Loader2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { orderApi } from '../../services/api';
 import { getOrdersByClient } from '../../services/firestore';
+import { mapApiOrderRowToOrder } from '../../services/b2bFromApi';
+import { logger } from '../../services/logger';
+import { notifyPlannedFeature } from '../../platform/notifications';
 import type { Order } from '../../types';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -17,14 +22,42 @@ const STATUS_LABELS: Record<string, string> = {
   returned: 'Qaytarildi',
 };
 
+async function loadOrdersForClient(uid: string): Promise<Order[]> {
+  try {
+    const rows = await orderApi.getAll();
+    const mine = rows.filter((r) => String(r.client) === uid);
+    return mine.map(mapApiOrderRowToOrder);
+  } catch (e) {
+    logger.warn('B2B buyurtmalar: API xato, Firestore fallback', { detail: String(e) });
+    return getOrdersByClient(uid, 100);
+  }
+}
+
 export default function B2BOrders() {
   const { user } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user?.uid) return;
-    getOrdersByClient(user.uid, 100).then(setOrders).finally(() => setLoading(false));
+    if (!user?.uid) {
+      setOrders([]);
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await loadOrdersForClient(user.uid);
+        if (!cancelled) setOrders(list);
+      } catch {
+        if (!cancelled) setOrders([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [user?.uid]);
 
   const formatDate = (d: string) => new Date(d).toLocaleDateString('uz-UZ', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -42,14 +75,26 @@ export default function B2BOrders() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-slate-900">Mening buyurtmalarim</h1>
-        <Button variant="outline" onClick={() => {}}>Filtr</Button>
+        <Button
+          variant="outline"
+          type="button"
+          onClick={() => notifyPlannedFeature('Buyurtmalar filtri')}
+        >
+          Filtr
+        </Button>
       </div>
 
       {orders.length === 0 ? (
         <Card className="py-10 sm:py-16 text-center">
           <Package className="h-16 w-16 text-slate-300 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-slate-900 mb-2">Buyurtmalar yo&apos;q</h3>
-          <p className="text-slate-500">Katalogdan buyurtma bering</p>
+          <p className="text-slate-500 mb-4">Katalogdan buyurtma bering</p>
+          <Link
+            to="/b2b/catalog"
+            className="inline-flex items-center justify-center rounded-full font-medium px-5 py-2.5 text-sm bg-gradient-to-r from-emerald-400 to-emerald-500 text-white shadow-md hover:from-emerald-300 hover:to-emerald-400"
+          >
+            Katalogga o‘tish
+          </Link>
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-4">

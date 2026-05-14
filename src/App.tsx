@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Suspense, lazy } from 'react';
 import AdminLayout from './layouts/AdminLayout';
 import B2BLayout from './layouts/B2BLayout';
@@ -6,8 +6,9 @@ import MobileLayout from './layouts/MobileLayout';
 import AccountantLayout from './layouts/AccountantLayout';
 import WarehouseLayout from './layouts/WarehouseLayout';
 import ProductionLayout from './layouts/ProductionLayout';
-import GlobalFooter from './components/GlobalFooter';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { ThemeProvider } from './context/ThemeContext';
+import { PlatformGlobal } from './components/platform/PlatformGlobal';
 import { Loader2 } from 'lucide-react';
 
 // Auth Pages
@@ -28,6 +29,7 @@ const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'));
 const AdminProduction = lazy(() => import('./pages/admin/AdminProduction'));
 const AdminAgents = lazy(() => import('./pages/admin/AdminAgents'));
 const AdminLogistics = lazy(() => import('./pages/admin/AdminLogistics'));
+const AdminWorkspace = lazy(() => import('./pages/admin/AdminWorkspace'));
 
 // Lazy loaded B2B Pages
 const B2BCatalog = lazy(() => import('./pages/b2b/B2BCatalog'));
@@ -69,9 +71,6 @@ const ProductionBatches = lazy(() => import('./pages/production/ProductionBatche
 const ProductionTransfer = lazy(() => import('./pages/production/ProductionTransfer'));
 
 function AppRoutes() {
-  const location = useLocation();
-  const isMarketingHome = ['/', '/login', '/register'].includes(location.pathname);
-
   // Loading fallback component
   const PageLoader = () => (
     <div className="flex items-center justify-center min-h-[50vh]">
@@ -80,15 +79,13 @@ function AppRoutes() {
   );
 
   return (
-    <div
-      className={`min-h-screen bg-emerald-50 text-slate-900 relative ${isMarketingHome ? 'pb-8' : 'pb-24'}`}
-    >
+    <div className="min-h-screen bg-emerald-50 text-slate-900">
       <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        
-        {/* B2B Portal Routes */}
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+
+          {/* B2B Portal Routes */}
         <Route element={<ProtectedRoute allowedRoles={['b2b']} />}>
           <Route path="/b2b" element={<B2BLayout />}>
             <Route index element={<Navigate to="/b2b/catalog" replace />} />
@@ -114,6 +111,7 @@ function AppRoutes() {
             <Route path="production" element={<Suspense fallback={<PageLoader />}><AdminProduction /></Suspense>} />
             <Route path="agents" element={<Suspense fallback={<PageLoader />}><AdminAgents /></Suspense>} />
             <Route path="logistics" element={<Suspense fallback={<PageLoader />}><AdminLogistics /></Suspense>} />
+            <Route path="workspace" element={<Suspense fallback={<PageLoader />}><AdminWorkspace /></Suspense>} />
           </Route>
         </Route>
 
@@ -177,7 +175,6 @@ function AppRoutes() {
         {/* 404 - barcha nomatch yo'llar */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-      {!isMarketingHome && <GlobalFooter />}
     </div>
   );
 }
@@ -185,7 +182,10 @@ function AppRoutes() {
 export default function App() {
   return (
     <Router>
-      <AppRoutes />
+      <ThemeProvider>
+        <PlatformGlobal />
+        <AppRoutes />
+      </ThemeProvider>
     </Router>
   );
 }

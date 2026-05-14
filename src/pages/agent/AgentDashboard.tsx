@@ -5,6 +5,7 @@ import { Button } from '../../components/ui/Button';
 import { MapPin, Target, TrendingUp, ShoppingCart, CheckCircle2, Navigation, Users } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useFirestore } from '../../hooks/useFirestore';
+import { addNotification } from '../../platform/notifications';
 import type { Client, Order, KPIRecord } from '../../types';
 
 export default function AgentDashboard() {
@@ -144,7 +145,14 @@ export default function AgentDashboard() {
         <Button 
           variant="secondary" 
           className="h-24 flex-col gap-2 shadow-sm border-white/10"
-          onClick={() => currentLocation && handleGPSCheckIn('manual')}
+          type="button"
+          onClick={() => {
+            if (currentLocation) {
+              handleGPSCheckIn('manual');
+            } else {
+              addNotification('GPS', 'Joylashuv xizmatini yoqing va sahifani yangilang.');
+            }
+          }}
         >
           <Navigation className="h-6 w-6 text-emerald-300" />
           <span className="text-slate-900">GPS Check-in</span>

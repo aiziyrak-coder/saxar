@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { QueryConstraint, DocumentData } from 'firebase/firestore';
+import { tryGetFirebaseDb } from '../firebase';
 import { FirestoreService } from '../services/firestore';
 
 interface UseFirestoreState<T> {
@@ -28,6 +29,11 @@ export function useFirestore<T extends DocumentData>(
   const service = useMemo(() => new FirestoreService<T>(collectionName), [collectionName]);
 
   const fetchData = useCallback(async () => {
+    const db = tryGetFirebaseDb();
+    if (!db) {
+      setState({ data: [], loading: false, error: null });
+      return;
+    }
     try {
       setState(prev => ({ ...prev, loading: true, error: null }));
       
@@ -54,6 +60,7 @@ export function useFirestore<T extends DocumentData>(
   }, [fetchData]);
 
   const create = useCallback(async (data: Omit<T, 'id'>): Promise<string | null> => {
+    if (!tryGetFirebaseDb()) return null;
     try {
       const id = await service.create(data);
       await fetchData();
@@ -66,6 +73,7 @@ export function useFirestore<T extends DocumentData>(
   }, [service, fetchData]);
 
   const update = useCallback(async (id: string, data: Partial<T>): Promise<boolean> => {
+    if (!tryGetFirebaseDb()) return false;
     try {
       await service.update(id, data);
       await fetchData();
@@ -78,6 +86,7 @@ export function useFirestore<T extends DocumentData>(
   }, [service, fetchData]);
 
   const remove = useCallback(async (id: string): Promise<boolean> => {
+    if (!tryGetFirebaseDb()) return false;
     try {
       await service.delete(id);
       await fetchData();
@@ -120,6 +129,10 @@ export function useFirestoreDoc<T extends DocumentData>(
       setState({ data: null, loading: false, error: null });
       return;
     }
+    if (!tryGetFirebaseDb()) {
+      setState({ data: null, loading: false, error: null });
+      return;
+    }
 
     try {
       setState(prev => ({ ...prev, loading: true, error: null }));
@@ -140,7 +153,7 @@ export function useFirestoreDoc<T extends DocumentData>(
   }, [fetchDoc]);
 
   const update = useCallback(async (data: Partial<T>): Promise<boolean> => {
-    if (!docId) return false;
+    if (!docId || !tryGetFirebaseDb()) return false;
     try {
       await service.update(docId, data);
       await fetchDoc();

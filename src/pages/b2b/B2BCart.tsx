@@ -9,9 +9,10 @@ import { orderService, generateOrderNumber } from '../../services/firestore';
 import { logAudit, AuditActions, EntityTypes } from '../../services/audit';
 import { Modal } from '../../components/ui/Modal';
 import { doc, getDoc } from 'firebase/firestore';
-import { getFirebaseDb } from '../../firebase';
+import { tryGetFirebaseDb, isFirebaseConfigured } from '../../firebase';
 import type { Order } from '../../types';
 import { logger } from '../../services/logger';
+import { addNotification } from '../../platform/notifications';
 
 export default function B2BCart() {
   const navigate = useNavigate();
@@ -24,7 +25,9 @@ export default function B2BCart() {
 
   useEffect(() => {
     if (!user?.uid) return;
-    getDoc(doc(getFirebaseDb(), 'clients', user.uid)).then((snap) => {
+    const db = tryGetFirebaseDb();
+    if (!db) return;
+    getDoc(doc(db, 'clients', user.uid)).then((snap) => {
       if (snap.exists()) setClientAddress(snap.data().address || '');
     }).catch(() => {});
   }, [user?.uid]);
@@ -35,6 +38,13 @@ export default function B2BCart() {
 
     setIsSubmitting(true);
     try {
+      if (!isFirebaseConfigured()) {
+        addNotification(
+          'Buyurtma',
+          'Firebase sozlanmaguncha buyurtma serverga yuborilmaydi. `firebase-applet-config.json` ni to‘ldiring yoki demo kirishdan foydalaning.'
+        );
+        return;
+      }
       const order: Omit<Order, 'id'> = {
         orderNumber: generateOrderNumber(),
         source: 'b2b',
@@ -69,6 +79,10 @@ export default function B2BCart() {
       };
 
       const orderId = await orderService.create(order);
+      if (!orderId) {
+        addNotification('Buyurtma', 'Firebase sozlanmagan yoki yozuv yaratilmadi.');
+        return;
+      }
       if (userData) {
         await logAudit(AuditActions.ORDER_CREATE, EntityTypes.ORDER, orderId, user.uid, userData.name || '', userData.role, undefined, { orderNumber: order.orderNumber, totalAmount: order.totalAmount });
       }

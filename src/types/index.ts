@@ -349,8 +349,8 @@ export interface AuditLog {
   userName: string;
   userRole: UserRole;
   // Details
-  oldData?: Record<string, any>;
-  newData?: Record<string, any>;
+  oldData?: Record<string, unknown>;
+  newData?: Record<string, unknown>;
   ipAddress?: string;
   userAgent?: string;
   createdAt: string;

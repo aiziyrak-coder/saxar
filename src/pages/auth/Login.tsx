@@ -4,25 +4,20 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Package, Phone, ArrowLeft, Lock } from 'lucide-react';
-import { getFirebaseAuth, getFirebaseDb, isFirebaseConfigured } from '../../firebase';
+import { getFirebaseAuth, tryGetFirebaseDb, isFirebaseConfigured } from '../../firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { BRAND, persistDemoUser } from '../../constants/branding';
+import { BRAND, isDemoLoginUiAllowed, persistDemoUser } from '../../constants/branding';
 import { DEV_ROLE_ORDER, DEV_ROLE_PHONE_CREDENTIALS } from '../../constants/devRoleLogins';
 import { logger } from '../../services/logger';
 import type { UserRole } from '../../types';
-
-const ROUTES: Record<string, string> = {
-  admin: '/admin',
-  accountant: '/accountant',
-  warehouse: '/warehouse',
-  production: '/production',
-  b2b: '/b2b',
-  agent: '/agent',
-  driver: '/driver',
-};
+import { parseUserRole, ROLE_HOME_PATHS } from '../../constants/roles';
 
 const FIXED_PASSWORD = 'SaxarERP123!';
+
+function allowDemoPasswordFallback(): boolean {
+  return isDemoLoginUiAllowed();
+}
 
 export default function Login() {
   const navigate = useNavigate();
@@ -45,9 +40,18 @@ export default function Login() {
     }
     setLoading(true);
     setError('');
-    const pwd = password.trim() || FIXED_PASSWORD;
+    const pwd = password.trim() || (allowDemoPasswordFallback() ? FIXED_PASSWORD : '');
+    if (!pwd) {
+      setError('Parolni kiriting');
+      setLoading(false);
+      return;
+    }
     try {
       if (!isFirebaseConfigured()) {
+        if (!isDemoLoginUiAllowed()) {
+          setError('Autentifikatsiya serveri sozlanmagan. Administrator bilan bog‘laning.');
+          return;
+        }
         persistDemoUser(
           JSON.stringify({
             uid: `demo_phone_b2b_${phone.replace(/\D/g, '').slice(-6) || 'user'}`,
@@ -69,10 +73,15 @@ export default function Login() {
       await signInWithEmailAndPassword(auth, syntheticEmail, pwd);
       const currentUser = auth.currentUser;
       if (currentUser) {
-        const userDocRef = doc(getFirebaseDb(), 'users', currentUser.uid);
+        const db = tryGetFirebaseDb();
+        if (!db) {
+          setError('Firestore mavjud emas. Konfiguratsiyani tekshiring.');
+          return;
+        }
+        const userDocRef = doc(db, 'users', currentUser.uid);
         const userDoc = await getDoc(userDocRef);
-        const role = userDoc.exists() ? String(userDoc.data().role || 'b2b') : 'b2b';
-        navigate(ROUTES[role] || '/');
+        const role = parseUserRole(userDoc.exists() ? userDoc.data().role : undefined);
+        navigate(ROLE_HOME_PATHS[role]);
       }
     } catch (err) {
       const fbErr = err as { message?: string; code?: string };
@@ -86,6 +95,10 @@ export default function Login() {
         msg.toLowerCase().includes('invalid-api-key');
 
       if (isOpNotAllowed || apiKeyBad) {
+        if (!isDemoLoginUiAllowed()) {
+          setError('Kirish sozlamalari noto‘g‘ri. Administrator bilan bog‘laning.');
+          return;
+        }
         persistDemoUser(
           JSON.stringify({
             uid: `demo_phone_b2b_${phone.replace(/\D/g, '').slice(-6) || 'user'}`,
@@ -113,6 +126,10 @@ export default function Login() {
   };
 
   const handleRoleQuickLogin = async (role: UserRole) => {
+    if (!isDemoLoginUiAllowed()) {
+      setError('Demo kirish o‘chirilgan. Administrator bilan bog‘laning.');
+      return;
+    }
     const creds = DEV_ROLE_PHONE_CREDENTIALS[role];
     if (!creds) return;
     setPhone(creds.phone);
@@ -133,14 +150,19 @@ export default function Login() {
             updatedAt: new Date().toISOString(),
           })
         );
-        window.location.href = ROUTES[role] || '/';
+        window.location.href = ROLE_HOME_PATHS[role];
         return;
       }
 
       const syntheticEmail = makeSyntheticEmail(creds.phone);
       const auth = getFirebaseAuth();
       const credential = await signInWithEmailAndPassword(auth, syntheticEmail, creds.password);
-      const userDocRef = doc(getFirebaseDb(), 'users', credential.user.uid);
+      const db = tryGetFirebaseDb();
+      if (!db) {
+        setError('Firestore mavjud emas. Konfiguratsiyani tekshiring.');
+        return;
+      }
+      const userDocRef = doc(db, 'users', credential.user.uid);
       const userDoc = await getDoc(userDocRef);
 
       if (!userDoc.exists()) {
@@ -155,8 +177,8 @@ export default function Login() {
       }
 
       const data = userDoc.exists() ? userDoc.data() : { role };
-      const effectiveRole = String(data.role || role);
-      navigate(ROUTES[effectiveRole] || ROUTES[role] || '/');
+      const effectiveRole = parseUserRole(data.role ?? role);
+      navigate(ROLE_HOME_PATHS[effectiveRole]);
     } catch (err) {
       const fbErr = err as { message?: string; code?: string };
       const msg = String(fbErr?.message || '');
@@ -190,7 +212,7 @@ export default function Login() {
             updatedAt: new Date().toISOString(),
           })
         );
-        window.location.href = ROUTES[role] || '/';
+        window.location.href = ROLE_HOME_PATHS[role];
         return;
       }
 
@@ -237,31 +259,33 @@ export default function Login() {
             </div>
           )}
 
-          <div className="mb-5">
-            <p className="text-center text-sm font-semibold text-slate-800 mb-1">Demo: rol bo‘yicha kirish</p>
-            <p className="text-center text-xs text-slate-500 mb-3">
-              Tugmani bosing — telefon va parol maydonda to‘ldiriladi va tizimga kiriladi.
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {DEV_ROLE_ORDER.map((role) => {
-                const c = DEV_ROLE_PHONE_CREDENTIALS[role];
-                return (
-                  <Button
-                    key={role}
-                    type="button"
-                    variant="outline"
-                    className="h-auto flex-col items-stretch py-2.5 px-3 text-left gap-1 border-emerald-200/80 bg-white/90 hover:bg-emerald-50/80"
-                    disabled={loading}
-                    onClick={() => void handleRoleQuickLogin(role)}
-                  >
-                    <span className="text-xs font-bold text-emerald-900 w-full">{c.title}</span>
-                    <span className="text-[11px] text-slate-600 w-full select-all font-mono">{c.phone}</span>
-                    <span className="text-[11px] text-slate-500 w-full select-all font-mono">Parol: {c.password}</span>
-                  </Button>
-                );
-              })}
+          {isDemoLoginUiAllowed() && (
+            <div className="mb-5">
+              <p className="text-center text-sm font-semibold text-slate-800 mb-1">Demo: rol bo‘yicha kirish</p>
+              <p className="text-center text-xs text-slate-500 mb-3">
+                Tugmani bosing — telefon va parol maydonda to‘ldiriladi va tizimga kiriladi.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {DEV_ROLE_ORDER.map((role) => {
+                  const c = DEV_ROLE_PHONE_CREDENTIALS[role];
+                  return (
+                    <Button
+                      key={role}
+                      type="button"
+                      variant="outline"
+                      className="h-auto flex-col items-stretch py-2.5 px-3 text-left gap-1 border-emerald-200/80 bg-white/90 hover:bg-emerald-50/80"
+                      disabled={loading}
+                      onClick={() => void handleRoleQuickLogin(role)}
+                    >
+                      <span className="text-xs font-bold text-emerald-900 w-full">{c.title}</span>
+                      <span className="text-[11px] text-slate-600 w-full select-all font-mono">{c.phone}</span>
+                      <span className="text-[11px] text-slate-500 w-full select-all font-mono">Parol: {c.password}</span>
+                    </Button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="relative mb-3">
             <div className="absolute inset-0 flex items-center">
@@ -307,12 +331,18 @@ export default function Login() {
                   type="password"
                   autoComplete="current-password"
                   className="pl-10"
-                  placeholder="Bo‘sh bo‘lsa — SaxarERP123!"
+                  placeholder={allowDemoPasswordFallback() ? 'Bo‘sh bo‘lsa — SaxarERP123!' : 'Parol'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
               </div>
-              <p className="mt-1 text-xs text-slate-500">Qo‘lda kirishda parol bo‘sh bo‘lsa, standart demo parol ishlatiladi.</p>
+              {allowDemoPasswordFallback() ? (
+                <p className="mt-1 text-xs text-slate-500">
+                  Qo‘lda kirishda parol bo‘sh bo‘lsa, standart demo parol ishlatiladi.
+                </p>
+              ) : (
+                <p className="mt-1 text-xs text-slate-500">Parolni kiriting.</p>
+              )}
             </div>
 
             <div className="flex items-center justify-between">

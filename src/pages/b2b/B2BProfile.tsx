@@ -7,39 +7,55 @@ import {
   Package, ShoppingCart, Star, CreditCard, Clock, ChevronRight,
   Edit3, Camera, FileText, Settings, MapPinned, Wallet
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { useState } from 'react';
-
-// Demo statistics - in real app, fetch from API
-const demoStats = {
-  totalOrders: 24,
-  totalSpent: 12500000,
-  activeOrders: 3,
-  favoriteProducts: 5,
-  creditLimit: 50000000,
-  currentDebt: 8500000,
-  loyaltyPoints: 1250,
-  memberSince: '2024-01-15',
-};
-
-// Demo recent orders
-const demoRecentOrders = [
-  { id: 'ORD-001', date: '2026-03-15', status: 'delivered', total: 1250000, items: 8 },
-  { id: 'ORD-002', date: '2026-03-10', status: 'in_transit', total: 2100000, items: 12 },
-  { id: 'ORD-003', date: '2026-03-05', status: 'delivered', total: 890000, items: 5 },
-];
-
-// Demo addresses
-const demoAddresses = [
-  { id: 1, name: 'Asosiy manzil', address: 'Toshkent sh., Yunusobod t., 19-kvartal, 42-uy', isDefault: true },
-  { id: 2, name: 'Ombor', address: 'Toshkent sh., Yashnobod t., 12-kvartal, 8-uy', isDefault: false },
-];
+import { useMemo, useState } from 'react';
+import { addNotification, notifyPlannedFeature } from '../../platform/notifications';
+import { useFirestore } from '../../hooks/useFirestore';
+import type { Client, Order, OrderStatus } from '../../types';
 
 export default function B2BProfile() {
   const navigate = useNavigate();
   const { userData, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
+
+  const { data: clients } = useFirestore<Client>('clients');
+  const { data: orders } = useFirestore<Order>('orders');
+
+  const clientProfile = useMemo(() => {
+    if (!userData) return null;
+    return (
+      clients.find(
+        (c) =>
+          (userData.stir && c.stir === userData.stir) ||
+          (userData.phone && c.phone === userData.phone) ||
+          c.id === userData.uid
+      ) ?? null
+    );
+  }, [clients, userData]);
+
+  const myOrders = useMemo(() => {
+    if (!clientProfile) return [];
+    return orders
+      .filter((o) => o.clientId === clientProfile.id)
+      .sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
+  }, [orders, clientProfile]);
+
+  const stats = useMemo(() => {
+    const totalOrders = myOrders.length;
+    const activeOrders = myOrders.filter((o) => !['delivered', 'cancelled', 'returned'].includes(o.status)).length;
+    const totalSpent = myOrders.filter((o) => o.status === 'delivered').reduce((s, o) => s + o.totalAmount, 0);
+    const returned = myOrders.filter((o) => o.status === 'returned').length;
+    const creditLimit = clientProfile?.creditLimit ?? 0;
+    const currentDebt = clientProfile?.currentBalance ?? 0;
+    return { totalOrders, activeOrders, totalSpent, returned, creditLimit, currentDebt };
+  }, [myOrders, clientProfile]);
+
+  const addressList = useMemo(() => {
+    const a = clientProfile?.address || userData?.address;
+    if (!a) return [];
+    return [{ id: 'main' as const, name: 'Asosiy manzil', address: a, isDefault: true }];
+  }, [clientProfile, userData]);
 
   const handleLogout = async () => {
     try {
@@ -54,18 +70,19 @@ export default function B2BProfile() {
     return new Intl.NumberFormat('uz-UZ').format(price) + ' so\'m';
   };
 
-  const getStatusBadge = (status: string) => {
-    const styles: Record<string, string> = {
-      delivered: 'bg-emerald-100 text-emerald-700',
-      in_transit: 'bg-blue-100 text-blue-700',
-      pending: 'bg-amber-100 text-amber-700',
+  const getStatusBadge = (status: OrderStatus) => {
+    const map: Record<OrderStatus, { className: string; label: string }> = {
+      pending: { className: 'bg-amber-100 text-amber-700', label: 'Kutilmoqda' },
+      confirmed: { className: 'bg-blue-100 text-blue-700', label: 'Tasdiqlangan' },
+      picking: { className: 'bg-blue-100 text-blue-700', label: 'Yig‘ilmoqda' },
+      packed: { className: 'bg-blue-100 text-blue-700', label: 'Qadoqlangan' },
+      in_transit: { className: 'bg-blue-100 text-blue-700', label: "Yo'lda" },
+      delivered: { className: 'bg-emerald-100 text-emerald-700', label: 'Yetkazildi' },
+      cancelled: { className: 'bg-slate-100 text-slate-700', label: 'Bekor' },
+      returned: { className: 'bg-rose-100 text-rose-700', label: 'Qaytarilgan' },
     };
-    const labels: Record<string, string> = {
-      delivered: 'Yetkazildi',
-      in_transit: 'Yo\'lda',
-      pending: 'Kutilmoqda',
-    };
-    return <Badge className={styles[status] || 'bg-slate-100'}>{labels[status] || status}</Badge>;
+    const row = map[status] ?? { className: 'bg-slate-100 text-slate-700', label: status };
+    return <Badge className={row.className}>{row.label}</Badge>;
   };
 
   return (
@@ -78,7 +95,11 @@ export default function B2BProfile() {
             <div className="h-24 w-24 md:h-32 md:w-32 bg-white rounded-2xl flex items-center justify-center border-4 border-white shadow-lg">
               <Building2 className="h-12 w-12 md:h-16 md:w-16 text-emerald-600" />
             </div>
-            <button className="absolute bottom-0 right-0 p-2 bg-emerald-500 text-white rounded-full shadow-md hover:bg-emerald-600 transition-colors">
+            <button
+              type="button"
+              className="absolute bottom-0 right-0 p-2 bg-emerald-500 text-white rounded-full shadow-md hover:bg-emerald-600 transition-colors"
+              onClick={() => notifyPlannedFeature('Kompaniya logotipi')}
+            >
               <Camera className="h-4 w-4" />
             </button>
           </div>
@@ -91,7 +112,12 @@ export default function B2BProfile() {
           </div>
         </div>
         <div className="absolute top-4 right-4 flex gap-2">
-          <Button variant="outline" className="bg-white/90 backdrop-blur-sm border-0 shadow-sm">
+          <Button
+            variant="outline"
+            className="bg-white/90 backdrop-blur-sm border-0 shadow-sm"
+            type="button"
+            onClick={() => notifyPlannedFeature('Profilni tahrirlash')}
+          >
             <Edit3 className="h-4 w-4 mr-2" /> Tahrirlash
           </Button>
         </div>
@@ -136,8 +162,8 @@ export default function B2BProfile() {
               <span className="text-sm opacity-90">Loyalty ballari</span>
               <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
             </div>
-            <div className="text-3xl font-bold">{demoStats.loyaltyPoints}</div>
-            <div className="text-xs opacity-75 mt-1">ball</div>
+            <div className="text-3xl font-bold">—</div>
+            <div className="text-xs opacity-75 mt-1">loyalty rejada</div>
           </Card>
 
           <Button variant="danger" className="w-full gap-2" onClick={handleLogout}>
@@ -155,29 +181,29 @@ export default function B2BProfile() {
                   <div className="h-12 w-12 bg-emerald-100 rounded-xl flex items-center justify-center mx-auto mb-3">
                     <ShoppingCart className="h-6 w-6 text-emerald-600" />
                   </div>
-                  <div className="text-2xl font-bold text-slate-900">{demoStats.totalOrders}</div>
+                  <div className="text-2xl font-bold text-slate-900">{stats.totalOrders}</div>
                   <div className="text-xs text-slate-500">Jami buyurtmalar</div>
                 </Card>
                 <Card className="p-4 text-center hover:shadow-md transition-shadow">
                   <div className="h-12 w-12 bg-blue-100 rounded-xl flex items-center justify-center mx-auto mb-3">
                     <Package className="h-6 w-6 text-blue-600" />
                   </div>
-                  <div className="text-2xl font-bold text-slate-900">{demoStats.activeOrders}</div>
+                  <div className="text-2xl font-bold text-slate-900">{stats.activeOrders}</div>
                   <div className="text-xs text-slate-500">Faol buyurtmalar</div>
                 </Card>
                 <Card className="p-4 text-center hover:shadow-md transition-shadow">
                   <div className="h-12 w-12 bg-amber-100 rounded-xl flex items-center justify-center mx-auto mb-3">
                     <CreditCard className="h-6 w-6 text-amber-600" />
                   </div>
-                  <div className="text-2xl font-bold text-slate-900">{formatPrice(demoStats.totalSpent).replace(' so\'m', '')}</div>
+                  <div className="text-2xl font-bold text-slate-900">{formatPrice(stats.totalSpent).replace(' so\'m', '')}</div>
                   <div className="text-xs text-slate-500">Jami xaridlar</div>
                 </Card>
                 <Card className="p-4 text-center hover:shadow-md transition-shadow">
                   <div className="h-12 w-12 bg-rose-100 rounded-xl flex items-center justify-center mx-auto mb-3">
                     <Star className="h-6 w-6 text-rose-600" />
                   </div>
-                  <div className="text-2xl font-bold text-slate-900">{demoStats.favoriteProducts}</div>
-                  <div className="text-xs text-slate-500">Sevimli mahsulotlar</div>
+                  <div className="text-2xl font-bold text-slate-900">{stats.returned}</div>
+                  <div className="text-xs text-slate-500">Qaytarilgan buyurtmalar</div>
                 </Card>
               </div>
 
@@ -189,15 +215,17 @@ export default function B2BProfile() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="p-4 bg-slate-50 rounded-xl">
                     <div className="text-sm text-slate-500 mb-1">Kredit limiti</div>
-                    <div className="text-xl font-bold text-slate-900">{formatPrice(demoStats.creditLimit)}</div>
+                    <div className="text-xl font-bold text-slate-900">{formatPrice(stats.creditLimit)}</div>
                   </div>
                   <div className="p-4 bg-slate-50 rounded-xl">
                     <div className="text-sm text-slate-500 mb-1">Joriy qarz</div>
-                    <div className="text-xl font-bold text-rose-600">{formatPrice(demoStats.currentDebt)}</div>
+                    <div className="text-xl font-bold text-rose-600">{formatPrice(stats.currentDebt)}</div>
                   </div>
                   <div className="p-4 bg-slate-50 rounded-xl">
                     <div className="text-sm text-slate-500 mb-1">Mavjud limit</div>
-                    <div className="text-xl font-bold text-emerald-600">{formatPrice(demoStats.creditLimit - demoStats.currentDebt)}</div>
+                    <div className="text-xl font-bold text-emerald-600">
+                      {formatPrice(Math.max(0, stats.creditLimit - stats.currentDebt))}
+                    </div>
                   </div>
                 </div>
               </Card>
@@ -213,23 +241,32 @@ export default function B2BProfile() {
                   </Button>
                 </div>
                 <div className="space-y-3">
-                  {demoRecentOrders.map((order) => (
-                    <div key={order.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer">
+                  {myOrders.slice(0, 5).map((order) => (
+                    <div
+                      key={order.id}
+                      className="flex items-center justify-between p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+                    >
                       <div className="flex items-center gap-4">
                         <div className="h-10 w-10 bg-emerald-100 rounded-lg flex items-center justify-center">
                           <Package className="h-5 w-5 text-emerald-600" />
                         </div>
                         <div>
-                          <div className="font-medium text-slate-900">{order.id}</div>
-                          <div className="text-sm text-slate-500">{order.items} ta mahsulot • {new Date(order.date).toLocaleDateString('uz-UZ')}</div>
+                          <div className="font-medium text-slate-900">{order.orderNumber || order.id}</div>
+                          <div className="text-sm text-slate-500">
+                            {order.items.length} ta pozitsiya •{' '}
+                            {order.orderDate ? new Date(order.orderDate).toLocaleDateString('uz-UZ') : '—'}
+                          </div>
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="font-bold text-slate-900">{formatPrice(order.total)}</div>
+                        <div className="font-bold text-slate-900">{formatPrice(order.totalAmount)}</div>
                         <div className="mt-1">{getStatusBadge(order.status)}</div>
                       </div>
                     </div>
                   ))}
+                  {myOrders.length === 0 && (
+                    <p className="text-sm text-slate-500 text-center py-6">Hozircha buyurtmalar yo‘q yoki mijoz kartasi topilmadi.</p>
+                  )}
                 </div>
               </Card>
 
@@ -274,7 +311,21 @@ export default function B2BProfile() {
               <h3 className="text-lg font-bold text-slate-900 mb-4">Barcha buyurtmalar</h3>
               <div className="text-center py-12 text-slate-500">
                 <Package className="h-16 w-16 mx-auto mb-4 text-slate-300" />
-                <p>To'liq buyurtmalar tarixi tez orada mavjud bo'ladi</p>
+                <p className="mb-4">To'liq buyurtmalar tarixi tez orada mavjud bo'ladi</p>
+                <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                  <Link
+                    to="/b2b/orders"
+                    className="inline-flex items-center justify-center rounded-full font-medium px-5 py-2.5 text-sm border border-emerald-400/50 text-emerald-600 bg-white/55 hover:bg-emerald-400/10"
+                  >
+                    Buyurtmalar sahifasi
+                  </Link>
+                  <Link
+                    to="/b2b/catalog"
+                    className="inline-flex items-center justify-center rounded-full font-medium px-5 py-2.5 text-sm bg-gradient-to-r from-emerald-400 to-emerald-500 text-white"
+                  >
+                    Katalog
+                  </Link>
+                </div>
               </div>
             </Card>
           )}
@@ -283,10 +334,20 @@ export default function B2BProfile() {
             <Card className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold text-slate-900">Mening manzillarim</h3>
-                <Button variant="primary" size="sm">Yangi manzil</Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  type="button"
+                  onClick={() => notifyPlannedFeature('Yangi yetkazib berish manzili')}
+                >
+                  Yangi manzil
+                </Button>
               </div>
               <div className="space-y-3">
-                {demoAddresses.map((addr) => (
+                {addressList.length === 0 && (
+                  <p className="text-sm text-slate-500">Profil yoki mijoz kartasida manzil ko‘rsatilmagan.</p>
+                )}
+                {addressList.map((addr) => (
                   <div key={addr.id} className="p-4 border border-slate-200 rounded-xl hover:border-emerald-300 transition-colors">
                     <div className="flex items-start justify-between">
                       <div className="flex items-start gap-3">
@@ -302,7 +363,14 @@ export default function B2BProfile() {
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        <Button variant="outline" size="sm">Tahrirlash</Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          type="button"
+                          onClick={() => notifyPlannedFeature('Manzilni tahrirlash', addr.name)}
+                        >
+                          Tahrirlash
+                        </Button>
                       </div>
                     </div>
                   </div>
@@ -329,11 +397,11 @@ export default function B2BProfile() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <label className="text-sm font-medium text-slate-700">Do'kon nomi</label>
-                      <Input defaultValue={userData?.name || "Makro Supermarket"} />
+                      <Input defaultValue={userData?.name || ''} />
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-sm font-medium text-slate-700">Yuridik nom</label>
-                      <Input defaultValue="Makro Retail MChJ" />
+                      <Input defaultValue={userData?.companyName || ''} />
                     </div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -351,8 +419,22 @@ export default function B2BProfile() {
                     <Input defaultValue="20208000900123456789" />
                   </div>
                   <div className="pt-4 flex flex-col sm:flex-row justify-end gap-3">
-                    <Button variant="outline" className="w-full sm:w-auto">Bekor qilish</Button>
-                    <Button variant="primary" className="w-full sm:w-auto">Saqlash</Button>
+                    <Button
+                      variant="outline"
+                      className="w-full sm:w-auto"
+                      type="button"
+                      onClick={() => addNotification('Bekor', 'O‘zgarishlar saqlanmadi.')}
+                    >
+                      Bekor qilish
+                    </Button>
+                    <Button
+                      variant="primary"
+                      className="w-full sm:w-auto"
+                      type="button"
+                      onClick={() => notifyPlannedFeature('Kompaniya ma’lumotlarini saqlash')}
+                    >
+                      Saqlash
+                    </Button>
                   </div>
                 </form>
               </Card>
@@ -375,7 +457,14 @@ export default function B2BProfile() {
                     </div>
                   </div>
                   <div className="pt-4 flex flex-col sm:flex-row justify-end">
-                    <Button variant="primary" className="w-full sm:w-auto">Parolni yangilash</Button>
+                    <Button
+                      variant="primary"
+                      className="w-full sm:w-auto"
+                      type="button"
+                      onClick={() => notifyPlannedFeature('Parolni yangilash')}
+                    >
+                      Parolni yangilash
+                    </Button>
                   </div>
                 </form>
               </Card>

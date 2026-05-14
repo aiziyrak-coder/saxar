@@ -7,7 +7,19 @@ import { Modal } from '../../components/ui/Modal';
 import { Search, Plus, AlertTriangle, Barcode, ArrowRightLeft, Package, Calendar } from 'lucide-react';
 import { useFirestore } from '../../hooks/useFirestore';
 import { inventoryService, generateBatchNumber } from '../../services/firestore';
+import { notifyPlannedFeature } from '../../platform/notifications';
 import type { InventoryItem, Product } from '../../types';
+
+type WmsTabId = 'inventory' | 'transactions' | 'expiry';
+
+type StockInFormPayload = {
+  productId: string;
+  quantity: number;
+  expiryDate: string;
+  manufactureDate: string;
+  location: string;
+  batchNumber?: string;
+};
 
 export default function AdminWMS() {
   const [search, setSearch] = useState('');
@@ -66,14 +78,7 @@ export default function AdminWMS() {
     return { label: 'Yaxshi', color: 'text-emerald-600', bg: 'bg-emerald-50' };
   };
 
-  const handleStockIn = async (data: {
-    productId: string;
-    quantity: number;
-    expiryDate: string;
-    manufactureDate: string;
-    location: string;
-    batchNumber?: string;
-  }) => {
+  const handleStockIn = async (data: StockInFormPayload) => {
     const product = products.find(p => p.id === data.productId);
     if (!product) return;
 
@@ -111,7 +116,12 @@ export default function AdminWMS() {
           <p className="text-slate-500 mt-1">FIFO usuli | Yaroqlilik muddati nazorati</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-2">
+          <Button
+            variant="outline"
+            className="gap-2"
+            type="button"
+            onClick={() => notifyPlannedFeature('Shtrix-kod skaner', 'USB/kamera skaner integratsiyasi rejada.')}
+          >
             <Barcode className="h-4 w-4" /> Skanerlash
           </Button>
           <Button variant="outline" className="gap-2" onClick={() => setShowTransferModal(true)}>
@@ -152,14 +162,16 @@ export default function AdminWMS() {
       {/* Tabs */}
       <div className="border-b border-slate-200">
         <nav className="-mb-px flex space-x-8">
-          {[
-            { id: 'inventory', label: 'Ombor qoldiqlari', icon: Package },
-            { id: 'transactions', label: 'Kirim-chiqim', icon: ArrowRightLeft },
-            { id: 'expiry', label: 'Yaroqlilik muddati', icon: Calendar },
-          ].map((tab) => (
+          {(
+            [
+              { id: 'inventory' as const, label: 'Ombor qoldiqlari', icon: Package },
+              { id: 'transactions' as const, label: 'Kirim-chiqim', icon: ArrowRightLeft },
+              { id: 'expiry' as const, label: 'Yaroqlilik muddati', icon: Calendar },
+            ] satisfies ReadonlyArray<{ id: WmsTabId; label: string; icon: typeof Package }>
+          ).map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
+              onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
                 activeTab === tab.id
                   ? 'border-emerald-500 text-emerald-600'
@@ -329,7 +341,7 @@ interface StockInModalProps {
   isOpen: boolean;
   onClose: () => void;
   products: Product[];
-  onSubmit: (data: any) => void;
+  onSubmit: (data: StockInFormPayload) => void;
 }
 
 function StockInModal({ isOpen, onClose, products, onSubmit }: StockInModalProps) {

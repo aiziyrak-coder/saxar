@@ -39,6 +39,8 @@ import {
   Building2,
   Award,
   Factory,
+  Instagram,
+  Send,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { useCart } from '../hooks/useCart';
@@ -88,19 +90,6 @@ const banners = [
   },
 ];
 
-// Product categories
-const brands = [
-  { id: '1', name: 'Kolbasa', logo: '🌭', count: 45 },
-  { id: '2', name: 'Sosiska', logo: '🔥', count: 32 },
-  { id: '3', name: 'Mol go\'shti', logo: '🥩', count: 28 },
-  { id: '4', name: 'Qo\'y go\'shti', logo: '🍖', count: 18 },
-  { id: '5', name: 'Tovuq', logo: '🍗', count: 24 },
-  { id: '6', name: 'Qiyma', logo: '🥟', count: 15 },
-];
-
-// Popular searches
-const popularSearches = ['Kolbasa', 'Sosiska', 'Mol go\'shti', 'Qiyma', 'Tovuq', 'Qo\'y go\'shti'];
-
 export default function LandingPage() {
   const navigate = useNavigate();
   const { user, userData } = useAuth();
@@ -123,7 +112,7 @@ export default function LandingPage() {
   const [orderNotes, setOrderNotes] = useState('');
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [currentBanner, setCurrentBanner] = useState(0);
-  const [flashSaleTime, setFlashSaleTime] = useState({ hours: 5, minutes: 23, seconds: 45 });
+  const [flashSaleTime, setFlashSaleTime] = useState({ hours: 0, minutes: 0, seconds: 0 });
   
   // Professional features state
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
@@ -144,11 +133,7 @@ export default function LandingPage() {
   const [sortBy, setSortBy] = useState('popular');
   const [scrollProgress, setScrollProgress] = useState(0);
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
-  const [notifications] = useState([
-    { id: '1', title: 'Buyurtmangiz yuborildi', time: '5 daqiqa oldin', read: false },
-    { id: '2', title: 'Yangi chegirmalar!', time: '1 soat oldin', read: false },
-    { id: '3', title: 'SAXAR10 kuponini ishlating', time: '2 soat oldin', read: true },
-  ]);
+  const [notifications] = useState<Array<{ id: string; title: string; time: string; read: boolean }>>([]);
 
   // API state
   const [products, setProducts] = useState<Product[]>([]);
@@ -223,6 +208,19 @@ export default function LandingPage() {
       .sort((a, b) => a.sortOrder - b.sortOrder);
   }, [categories]);
 
+  const categoryTiles = useMemo(
+    () =>
+      categoriesSorted.slice(0, 12).map((c) => ({
+        id: c.id,
+        name: c.name,
+        logo: '📦',
+        count: products.filter((p) => p.categoryId === c.id && p.isActive).length,
+      })),
+    [categoriesSorted, products]
+  );
+
+  const suggestTerms = useMemo(() => categoriesSorted.slice(0, 8).map((c) => c.name), [categoriesSorted]);
+
   const isB2bUser = userData?.role === 'b2b';
   const canAddToCart = !isB2bUser || clientApproved === true;
   const canShowPrices = !isB2bUser || clientApproved === true;
@@ -237,20 +235,20 @@ export default function LandingPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Flash sale countdown
+  // Flash sale — kun oxirigacha qolgan vaqt
   useEffect(() => {
-    const interval = setInterval(() => {
-      setFlashSaleTime((prev) => {
-        if (prev.seconds > 0) {
-          return { ...prev, seconds: prev.seconds - 1 };
-        } else if (prev.minutes > 0) {
-          return { ...prev, minutes: prev.minutes - 1, seconds: 59 };
-        } else if (prev.hours > 0) {
-          return { hours: prev.hours - 1, minutes: 59, seconds: 59 };
-        }
-        return { hours: 23, minutes: 59, seconds: 59 };
+    const tick = () => {
+      const end = new Date();
+      end.setHours(24, 0, 0, 0);
+      const diff = Math.max(0, end.getTime() - Date.now());
+      setFlashSaleTime({
+        hours: Math.floor(diff / 3_600_000),
+        minutes: Math.floor((diff % 3_600_000) / 60_000),
+        seconds: Math.floor((diff % 60_000) / 1000),
       });
-    }, 1000);
+    };
+    tick();
+    const interval = window.setInterval(tick, 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -267,11 +265,16 @@ export default function LandingPage() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Demo mode - client always approved
+  // B2B mijoz: tasdiq va manzil — profildan
   useEffect(() => {
-    setClientApproved(true);
-    setClientAddress('Toshkent sh.');
-  }, [user?.uid]);
+    if (userData?.role !== 'b2b') {
+      setClientApproved(null);
+      setClientAddress('');
+      return;
+    }
+    setClientApproved(userData.status === 'active');
+    setClientAddress((userData.address || '').trim());
+  }, [userData?.role, userData?.status, userData?.address]);
 
   useEffect(() => {
     const id = window.setTimeout(() => setDebouncedCatalogSearch(catalogSearch.trim()), 300);
@@ -293,7 +296,7 @@ export default function LandingPage() {
     });
   }, [products, debouncedCatalogSearch, selectedCategory]);
 
-  // Top products (eng ko'p sotilgan - random for demo)
+  // Top products — katalogdan birinchi faol mahsulotlar
   const topProducts = useMemo(() => {
     return [...products]
       .filter((p) => p.isB2BActive && p.isActive)
@@ -507,7 +510,11 @@ export default function LandingPage() {
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
-        await orderService.create(fsOrder);
+        const fid = await orderService.create(fsOrder);
+        if (!fid) {
+          alert('Buyurtma Firestore ga yozilmadi. Firebase sozlanganini tekshiring.');
+          return;
+        }
       }
 
       clearCart();
@@ -669,9 +676,6 @@ export default function LandingPage() {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-              <span className="hidden lg:inline text-xs text-slate-400 max-w-[220px] leading-snug">
-                Hamkorlar va xodimlar: buyurtma, ombor, moliya, logistika — bitta Saxar ERP.
-              </span>
               <Link
                 to="/register"
                 className="inline-flex items-center justify-center rounded-xl border border-white/25 bg-white/10 px-3 py-2 text-xs sm:text-sm font-semibold text-white hover:bg-white/15 transition-colors"
@@ -812,7 +816,10 @@ export default function LandingPage() {
                   <div className="p-2">
                     <div className="text-[10px] text-slate-400 mb-1.5">Mashhur</div>
                     <div className="flex flex-wrap gap-1.5">
-                      {popularSearches.map((term, i) => (
+                      {suggestTerms.length === 0 && (
+                        <span className="text-xs text-slate-400">Kategoriyalar yuklangach takliflar paydo bo‘ladi</span>
+                      )}
+                      {suggestTerms.map((term, i) => (
                         <button key={i} onClick={() => { setCatalogSearch(term); handleSearch(term); }} className="px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-full text-xs hover:bg-emerald-100 transition-colors">
                           {term}
                         </button>
@@ -833,9 +840,11 @@ export default function LandingPage() {
                     className="relative w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center hover:bg-emerald-50 transition-colors"
                   >
                     <Bell className="h-4 w-4 text-slate-500" />
+                    {notifications.length > 0 && (
                     <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-emerald-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                      2
+                      {notifications.length}
                     </span>
+                    )}
                   </button>
                   {showNotifications && (
                     <div className="absolute top-full right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl shadow-emerald-100 border border-emerald-100 overflow-hidden z-50">
@@ -844,6 +853,9 @@ export default function LandingPage() {
                         <button className="text-sm text-emerald-600 hover:text-emerald-700">Barchasini o'qish</button>
                       </div>
                       <div className="max-h-64 overflow-y-auto">
+                        {notifications.length === 0 && (
+                          <p className="p-4 text-sm text-slate-500">Hozircha bildirishnomalar yo‘q.</p>
+                        )}
                         {notifications.map((n) => (
                           <div key={n.id} className={`p-3 border-b border-emerald-50 hover:bg-emerald-50/50 cursor-pointer ${!n.read ? 'bg-emerald-50/30' : ''}`}>
                             <div className="flex items-start gap-3">
@@ -995,12 +1007,13 @@ export default function LandingPage() {
               {BRAND.name} kompaniyasi
             </span>
             <h1 className="mt-4 text-3xl sm:text-4xl lg:text-5xl font-extrabold text-slate-900 tracking-tight leading-tight">
-              Tabiiylik, zanjir va{' '}
+              Tabiiylik, sifat va{' '}
               <span className="bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">ishonch</span>
             </h1>
             <p className="mt-4 text-slate-600 text-sm sm:text-base leading-relaxed">
-              {BRAND.description} B2B hamkorlar uchun ulgurji narxlar, sovuq saqlash bilan yetkazib berish va yagona{' '}
-              <span className="font-semibold text-emerald-700">{BRAND.erpProductName}</span> orqali jarayonlarni nazorat qiling.
+              {BRAND.description} B2B hamkorlar uchun ulgurji narxlar, sovuqda saqlab yetkazish va yagona{' '}
+              <span className="font-semibold text-emerald-700">{BRAND.erpProductName}</span> orqali buyurtmadan
+              hisobotgacha jarayonlarni bir joyda boshqaring.
             </p>
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
               <button
@@ -1035,9 +1048,9 @@ export default function LandingPage() {
               <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-teal-100 text-teal-700">
                 <Truck className="h-5 w-5" />
               </div>
-              <h3 className="text-base font-bold text-slate-900">Sovuq zanjir</h3>
+              <h3 className="text-base font-bold text-slate-900">Sovuqda saqlash va yetkazish</h3>
               <p className="mt-2 text-sm text-slate-600 leading-relaxed">
-                -18°C gacha saqlash va transport: mahsulot sizga qadar xavfsiz haroratda yetadi.
+                -18°C gacha saqlash va xavfsiz transport: mahsulot sizga yetguncha harorat tartibi buzilmaydi.
               </p>
             </div>
             <div className="rounded-3xl border border-white/60 bg-white/80 p-5 shadow-lg shadow-emerald-900/5 backdrop-blur-md">
@@ -1351,11 +1364,14 @@ export default function LandingPage() {
       <section className="py-8 bg-slate-50">
         <div className="max-w-7xl mx-auto px-4">
           <div className="text-center mb-6">
-            <h2 className="text-lg font-bold text-slate-800 mb-1">Mashhur brendlar</h2>
-            <p className="text-slate-500 text-xs">Ishonchli ishlab chiqaruvchilar</p>
+            <h2 className="text-lg font-bold text-slate-800 mb-1">Kategoriyalar</h2>
+            <p className="text-slate-500 text-xs">Katalog bo‘yicha</p>
           </div>
           <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
-            {brands.map((brand) => (
+            {categoryTiles.length === 0 && (
+              <p className="col-span-full text-center text-sm text-slate-500 py-6">Kategoriyalar yuklanmoqda...</p>
+            )}
+            {categoryTiles.map((brand) => (
               <button
                 key={brand.id}
                 className="p-4 rounded-xl border border-slate-200 bg-white hover:border-emerald-200 transition-all hover:shadow-md"
@@ -1509,12 +1525,15 @@ export default function LandingPage() {
           <div className="grid md:grid-cols-2 gap-8 items-center">
             <div>
               <h2 className="text-2xl font-bold text-slate-900 mb-4">
-                {BRAND.name} — sifatli go&apos;sht mahsulotlari ishlab chiqaruvchi
+                {BRAND.name} — oila va hamkorlar uchun taza go&apos;sht-kolbasa
               </h2>
-              <p className="text-slate-600 mb-6">
-                {BRAND.name} O&apos;zbekistonda tabiiy xom asyo va zamonaviy texnologiyalar yordamida go&apos;sht-kolbasa
-                mahsulotlarini ishlab chiqaradi. Har kuni yangi so&apos;yilgan go&apos;sht va sovuq zanjir bilan
-                hamkorlarga yetkazib beramiz. Korxona jarayonlari uchun {BRAND.erpProductName} tizimidan foydalaning.
+              <p className="text-slate-600 mb-4 leading-relaxed">
+                {BRAND.description}
+              </p>
+              <p className="text-slate-600 mb-6 leading-relaxed text-sm">
+                Do&apos;kon yoki oshxona uchun buyurtma, narx va yetkazib berishni qulay qilish uchun hamkorlar{' '}
+                {BRAND.erpProductName} orqali buyurtma, ombor va logistikani bir joyda boshqiradi — siz esa vaqtingizni
+                mijozlarga sarflaysiz.
               </p>
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-slate-50 rounded-xl p-4">
@@ -1836,6 +1855,59 @@ export default function LandingPage() {
                 <li>Yakshanba: Dam olish kuni</li>
               </ul>
             </div>
+          </div>
+
+          <div className="mt-6 pt-4 border-t border-slate-200 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[10px] sm:text-[11px] text-slate-500 leading-snug pb-[env(safe-area-inset-bottom,0px)]">
+            <span className="text-slate-500 whitespace-nowrap">© 2026</span>
+            <span className="hidden sm:inline text-slate-400">·</span>
+            <span className="whitespace-nowrap">
+              Ishlab chiqaruvchi:{' '}
+              <a
+                href="https://cdcgroup.uz"
+                target="_blank"
+                rel="noreferrer"
+                className="font-medium text-emerald-600 hover:underline"
+              >
+                CDCGroup
+              </a>
+              <span className="text-slate-400 mx-1">/</span>
+              <a
+                href="https://cdcgroup.uz"
+                target="_blank"
+                rel="noreferrer"
+                className="font-medium text-emerald-600 hover:underline"
+              >
+                CraDev Company
+              </a>
+            </span>
+            <span className="text-slate-400 hidden sm:inline">·</span>
+            <span className="inline-flex items-center gap-1 whitespace-nowrap">
+              <Phone className="h-3 w-3 text-slate-400 shrink-0" aria-hidden />
+              <a href="tel:+998907863888" className="hover:text-emerald-600 hover:underline">
+                +998 90 786 38 88
+              </a>
+            </span>
+            <span className="text-slate-400">·</span>
+            <span className="inline-flex items-center gap-1.5">
+              <a
+                href="https://t.me/Xazrat_bro"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Telegram"
+                className="p-0.5 rounded hover:bg-emerald-50"
+              >
+                <Send className="h-3.5 w-3.5 text-emerald-700" />
+              </a>
+              <a
+                href="https://www.instagram.com/islom_cdcgroup?igsh=MXVtejdibTUzY281ZQ=="
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Instagram"
+                className="p-0.5 rounded hover:bg-emerald-50"
+              >
+                <Instagram className="h-3.5 w-3.5 text-emerald-700" />
+              </a>
+            </span>
           </div>
 
         </div>

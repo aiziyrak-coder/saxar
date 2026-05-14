@@ -1,17 +1,8 @@
 import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { ROLE_HOME_PATHS } from '../constants/roles';
 import type { UserRole } from '../types';
-
-const ROLE_DASHBOARD: Record<UserRole, string> = {
-  admin: '/admin',
-  accountant: '/accountant',
-  warehouse: '/warehouse',
-  agent: '/agent',
-  driver: '/driver',
-  b2b: '/b2b',
-  production: '/production',
-};
 
 interface ProtectedRouteProps {
   allowedRoles?: UserRole[];
@@ -33,7 +24,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) 
   }
 
   if (allowedRoles && !allowedRoles.includes(userData.role)) {
-    const redirect = ROLE_DASHBOARD[userData.role] || '/';
+    const redirect = ROLE_HOME_PATHS[userData.role] || '/';
     return <Navigate to={redirect} replace />;
   }
 

@@ -3,10 +3,9 @@ import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { FileText, Search } from 'lucide-react';
-import { collection, getDocs, query, where, orderBy, limit } from 'firebase/firestore';
-import { getFirebaseDb } from '../../firebase';
+import { where, orderBy, limit } from 'firebase/firestore';
 import type { Client } from '../../types';
-import { getClientBalance } from '../../services/firestore';
+import { clientService, getClientBalance } from '../../services/firestore';
 
 export default function AccountantAktSverka() {
   const [clients, setClients] = useState<Client[]>([]);
@@ -16,15 +15,24 @@ export default function AccountantAktSverka() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const q = query(
-      collection(getFirebaseDb(), 'clients'),
-      where('status', '==', 'active'),
-      orderBy('name'),
-      limit(200)
-    );
-    getDocs(q).then(snap => {
-      setClients(snap.docs.map(d => ({ id: d.id, ...d.data() } as Client)));
-    }).finally(() => setLoading(false));
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await clientService.query([
+          where('status', '==', 'active'),
+          orderBy('name'),
+          limit(200),
+        ]);
+        if (!cancelled) setClients(list);
+      } catch {
+        if (!cancelled) setClients([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -32,7 +40,9 @@ export default function AccountantAktSverka() {
       setBalance(null);
       return;
     }
-    getClientBalance(selectedClientId).then(setBalance);
+    getClientBalance(selectedClientId)
+      .then(setBalance)
+      .catch(() => setBalance(null));
   }, [selectedClientId]);
 
   const filtered = clients.filter(c =>

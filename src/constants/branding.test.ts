@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { erpHomePathForRole, ERP_LOGIN_PATH } from './branding';
+import { erpHomePathForRole, ERP_LOGIN_PATH, isDemoLoginUiAllowed } from './branding';
 
 describe('branding', () => {
   it('maps roles to ERP home paths', () => {
@@ -10,5 +10,9 @@ describe('branding', () => {
 
   it('falls back to login when role is missing', () => {
     expect(erpHomePathForRole(undefined)).toBe(ERP_LOGIN_PATH);
+  });
+
+  it('isDemoLoginUiAllowed returns boolean', () => {
+    expect(typeof isDemoLoginUiAllowed()).toBe('boolean');
   });
 });

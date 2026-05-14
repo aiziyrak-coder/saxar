@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Wallet, TrendingUp, TrendingDown, FileText, Download, Building2 } from 'lucide-react';
 import { useFirestore } from '../../hooks/useFirestore';
+import { downloadCsv } from '../../platform/csv';
+import { addNotification, notifyPlannedFeature } from '../../platform/notifications';
 import type { Payment, Expense, Client } from '../../types';
 
 export default function AdminFinance() {
@@ -14,7 +16,37 @@ export default function AdminFinance() {
   const { data: expenses } = useFirestore<Expense>('expenses');
   const { data: clients } = useFirestore<Client>('clients');
 
-  // Calculate totals - used in JSX below
+  const monthStart = useMemo(() => {
+    const d = new Date();
+    d.setDate(1);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+
+  const totalReceivables = useMemo(
+    () => clients.reduce((sum, c) => sum + (c.currentBalance > 0 ? c.currentBalance : 0), 0),
+    [clients]
+  );
+
+  const debtorCount = useMemo(() => clients.filter((c) => c.currentBalance > 0).length, [clients]);
+
+  const monthlyRevenue = useMemo(
+    () =>
+      payments
+        .filter((p) => p.direction === 'in' && new Date(p.createdAt) >= monthStart)
+        .reduce((s, p) => s + p.amount, 0),
+    [payments, monthStart]
+  );
+
+  const monthlyOutflow = useMemo(() => {
+    const fromPayments = payments
+      .filter((p) => p.direction === 'out' && new Date(p.createdAt) >= monthStart)
+      .reduce((s, p) => s + p.amount, 0);
+    const fromExpenses = expenses
+      .filter((e) => new Date(e.date) >= monthStart)
+      .reduce((s, e) => s + e.amount, 0);
+    return fromPayments + fromExpenses;
+  }, [payments, expenses, monthStart]);
 
   // Get recent transactions (payments + expenses combined)
   const allTransactions = [
@@ -46,15 +78,33 @@ export default function AdminFinance() {
     return new Intl.NumberFormat('uz-UZ').format(amount);
   };
 
+  const exportFinanceCsv = () => {
+    const rows = allTransactions.map((trx) => ({
+      sana: trx.date,
+      id: trx.id,
+      manba: trx.source,
+      tur: trx.type,
+      usul: trx.method,
+      summa_UZS: trx.amount,
+    }));
+    downloadCsv(`moliya-tranzaksiyalar-${Date.now()}.csv`, rows);
+    addNotification('Excel', `${rows.length} ta qator yuklandi.`);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-slate-900">Moliya va Buxgalteriya</h1>
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-2">
+          <Button variant="outline" className="gap-2" type="button" onClick={exportFinanceCsv}>
             <Download className="h-4 w-4" /> Hisobot (Excel)
           </Button>
-          <Button variant="primary" className="gap-2">
+          <Button
+            variant="primary"
+            className="gap-2"
+            type="button"
+            onClick={() => notifyPlannedFeature('Yangi tranzaksiya', 'Qo‘lda tranzaksiya kiritish rejada.')}
+          >
             <FileText className="h-4 w-4" /> Yangi tranzaksiya
           </Button>
         </div>
@@ -63,36 +113,35 @@ export default function AdminFinance() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="bg-gradient-to-br from-emerald-50 to-emerald-100 text-slate-900 border-none">
           <div className="flex items-center justify-between mb-4">
-            <div className="text-emerald-700 font-medium">Umumiy Balans</div>
+            <div className="text-emerald-700 font-medium">Debet (mijozlar)</div>
             <Wallet className="h-6 w-6 text-emerald-600" />
           </div>
-          <div className="text-3xl font-bold mb-2">145,250,000 UZS</div>
+          <div className="text-3xl font-bold mb-2">{formatCurrency(totalReceivables)} UZS</div>
           <div className="flex gap-4 text-sm text-emerald-700 mt-4 pt-4 border-t border-emerald-500/30">
-            <div>Naqd: 45M</div>
-            <div>Bank: 100M</div>
+            <div>Qarzdor mijozlar: {debtorCount} ta</div>
           </div>
         </Card>
         
         <Card>
           <div className="flex items-center justify-between mb-4">
-            <div className="text-slate-500 font-medium">Oylik Tushum</div>
+            <div className="text-slate-500 font-medium">Oylik tushum (to‘lovlar)</div>
             <div className="p-2 bg-emerald-50 rounded-lg">
               <TrendingUp className="h-5 w-5 text-emerald-600" />
             </div>
           </div>
-          <div className="text-2xl font-bold text-slate-900 mb-2">850,000,000 UZS</div>
-          <div className="text-sm font-medium text-emerald-600">+15% o'tgan oyga nisbatan</div>
+          <div className="text-2xl font-bold text-slate-900 mb-2">{formatCurrency(monthlyRevenue)} UZS</div>
+          <div className="text-sm font-medium text-slate-500">Joriy oy: kirim yo‘nalishi</div>
         </Card>
         
         <Card>
           <div className="flex items-center justify-between mb-4">
-            <div className="text-slate-500 font-medium">Oylik Xarajatlar</div>
+            <div className="text-slate-500 font-medium">Oylik chiqim</div>
             <div className="p-2 bg-red-50 rounded-lg">
               <TrendingDown className="h-5 w-5 text-red-600" />
             </div>
           </div>
-          <div className="text-2xl font-bold text-slate-900 mb-2">320,000,000 UZS</div>
-          <div className="text-sm font-medium text-red-600">+5% o'tgan oyga nisbatan</div>
+          <div className="text-2xl font-bold text-slate-900 mb-2">{formatCurrency(monthlyOutflow)} UZS</div>
+          <div className="text-sm font-medium text-slate-500">Chiqim to‘lovlari + xarajatlar</div>
         </Card>
       </div>
 
@@ -104,10 +153,16 @@ export default function AdminFinance() {
           Tranzaksiyalar
         </button>
         <button 
-          className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${activeTab === 'aktsverka' ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-slate-500 hover:text-slate-500 hover:text-slate-700'}`}
+          className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${activeTab === 'aktsverka' ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
           onClick={() => setActiveTab('aktsverka')}
         >
           Akt Sverka (Qarzdorlik)
+        </button>
+        <button 
+          className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${activeTab === 'expenses' ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+          onClick={() => setActiveTab('expenses')}
+        >
+          Operatsion xarajatlar
         </button>
       </div>
 
@@ -117,7 +172,14 @@ export default function AdminFinance() {
             <>
               <div className="p-6 border-b border-emerald-200/60 flex justify-between items-center bg-white/60">
                 <h3 className="text-lg font-bold text-slate-900">So'nggi tranzaksiyalar</h3>
-                <Button variant="ghost" size="sm">Barchasi</Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  type="button"
+                  onClick={() => notifyPlannedFeature('Barcha tranzaksiyalar')}
+                >
+                  Barchasi
+                </Button>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
@@ -153,11 +215,18 @@ export default function AdminFinance() {
                 </table>
               </div>
             </>
-          ) : (
+          ) : activeTab === 'aktsverka' ? (
             <>
               <div className="p-6 border-b border-emerald-200/60 flex justify-between items-center bg-white/60">
                 <h3 className="text-lg font-bold text-slate-900">Mijozlar bilan solishtirma dalolatnoma</h3>
-                <Button variant="ghost" size="sm">Barchasi</Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  type="button"
+                  onClick={() => notifyPlannedFeature('Akt sverka', 'Barcha mijozlar bo‘yicha kengaytirilgan dalolatnoma rejada.')}
+                >
+                  Barchasi
+                </Button>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
@@ -190,6 +259,48 @@ export default function AdminFinance() {
                 </table>
               </div>
             </>
+          ) : (
+            <>
+              <div className="p-6 border-b border-emerald-200/60 bg-white/60">
+                <h3 className="text-lg font-bold text-slate-900">Operatsion xarajatlar (Firestore)</h3>
+                <p className="text-sm text-slate-500 mt-1">Buxgalteriya modulidagi xarajat yozuvlari bilan sinxron.</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-white/70 border-b border-emerald-200/60">
+                      <th className="py-3 px-6 font-semibold text-slate-700 text-xs uppercase tracking-wider">Sana</th>
+                      <th className="py-3 px-6 font-semibold text-slate-700 text-xs uppercase tracking-wider">Tavsif</th>
+                      <th className="py-3 px-6 font-semibold text-slate-700 text-xs uppercase tracking-wider">Kategoriya</th>
+                      <th className="py-3 px-6 font-semibold text-slate-700 text-xs uppercase tracking-wider text-right">Summa</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800">
+                    {[...expenses]
+                      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                      .map((ex) => (
+                        <tr key={ex.id} className="hover:bg-emerald-50 transition-colors">
+                          <td className="py-4 px-6 text-sm text-slate-900">
+                            {new Date(ex.date).toLocaleDateString('uz-UZ')}
+                          </td>
+                          <td className="py-4 px-6 font-medium text-slate-900">{ex.description}</td>
+                          <td className="py-4 px-6 text-sm text-slate-700">{ex.category}</td>
+                          <td className="py-4 px-6 text-right font-bold text-red-600">
+                            -{ex.amount.toLocaleString()} UZS
+                          </td>
+                        </tr>
+                      ))}
+                    {expenses.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="py-8 text-center text-slate-400">
+                          Xarajat yozuvlari yo‘q
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </Card>
         
@@ -207,7 +318,14 @@ export default function AdminFinance() {
                     <div className="text-xs text-emerald-600 font-medium">Ulangan (Sinxron)</div>
                   </div>
                 </div>
-                <Button variant="ghost" size="sm">Sozlash</Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  type="button"
+                  onClick={() => notifyPlannedFeature('1C integratsiya')}
+                >
+                  Sozlash
+                </Button>
               </div>
               
               <div className="flex items-center justify-between p-3 border border-slate-200 rounded-lg hover:border-emerald-300 cursor-pointer transition-colors">
@@ -218,7 +336,14 @@ export default function AdminFinance() {
                     <div className="text-xs text-emerald-600 font-medium">Ulangan</div>
                   </div>
                 </div>
-                <Button variant="ghost" size="sm">Sozlash</Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  type="button"
+                  onClick={() => notifyPlannedFeature('Didox integratsiya')}
+                >
+                  Sozlash
+                </Button>
               </div>
               
               <div className="flex items-center justify-between p-3 border border-slate-200 rounded-lg hover:border-emerald-300 cursor-pointer transition-colors">
@@ -229,7 +354,14 @@ export default function AdminFinance() {
                     <div className="text-xs text-slate-500">Ulanmagan</div>
                   </div>
                 </div>
-                <Button variant="outline" size="sm">Ulash</Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  type="button"
+                  onClick={() => notifyPlannedFeature('E-Aktiv ulanish')}
+                >
+                  Ulash
+                </Button>
               </div>
             </div>
           </Card>
@@ -239,7 +371,14 @@ export default function AdminFinance() {
             <div className="text-sm text-slate-600 mb-4">
               Joriy oy uchun xodimlar, agentlar va dastavkachilar ish haqini hisoblash.
             </div>
-            <Button variant="primary" className="w-full">Hisoblashni boshlash</Button>
+            <Button
+              variant="primary"
+              className="w-full"
+              type="button"
+              onClick={() => notifyPlannedFeature('Payroll hisoblash')}
+            >
+              Hisoblashni boshlash
+            </Button>
           </Card>
         </div>
       </div>

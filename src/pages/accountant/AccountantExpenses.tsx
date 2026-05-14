@@ -5,11 +5,11 @@ import { Input } from '../../components/ui/Input';
 import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { Plus } from 'lucide-react';
-import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
-import { getFirebaseDb } from '../../firebase';
+import { orderBy, limit } from 'firebase/firestore';
 import { useAuth } from '../../context/AuthContext';
 import { expenseService } from '../../services/firestore';
 import { logAudit, AuditActions, EntityTypes } from '../../services/audit';
+import { addNotification } from '../../platform/notifications';
 import type { Expense, ExpenseCategory } from '../../types';
 
 const CATEGORIES: { value: ExpenseCategory; label: string }[] = [
@@ -32,19 +32,20 @@ export default function AccountantExpenses() {
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({ category: 'other' as ExpenseCategory, amount: '', description: '', date: new Date().toISOString().slice(0, 10) });
 
-  const loadExpenses = () => {
-    const q = query(
-      collection(getFirebaseDb(), 'expenses'),
-      orderBy('date', 'desc'),
-      limit(50)
-    );
-    getDocs(q).then(snap => {
-      setExpenses(snap.docs.map(d => ({ id: d.id, ...d.data() } as Expense)));
-    }).finally(() => setLoading(false));
+  const loadExpenses = async () => {
+    setLoading(true);
+    try {
+      const rows = await expenseService.query([orderBy('date', 'desc'), limit(50)]);
+      setExpenses(rows);
+    } catch {
+      setExpenses([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    loadExpenses();
+    void loadExpenses();
   }, []);
 
   const handleAddExpense = async (e: React.FormEvent) => {
@@ -63,6 +64,10 @@ export default function AccountantExpenses() {
         createdByName: userData.name || 'Buxgalter',
         createdAt: new Date().toISOString(),
       } as Omit<Expense, 'id'>);
+      if (!id) {
+        addNotification('Xarajat', 'Firebase sozlanmagan — yozuv saqlanmadi.');
+        return;
+      }
       await logAudit(AuditActions.EXPENSE_CREATE, EntityTypes.EXPENSE, id, userData.uid, userData.name || '', userData.role, undefined, { category: form.category, amount });
       setShowModal(false);
       setForm({ category: 'other', amount: '', description: '', date: new Date().toISOString().slice(0, 10) });

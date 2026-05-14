@@ -5,6 +5,7 @@ vi.mock('../firebase', () => ({
   isFirebaseConfigured: () => false,
   getFirebaseAuth: () => ({ currentUser: null }),
   getFirebaseDb: () => ({}),
+  tryGetFirebaseDb: () => null,
 }));
 
 // Mock window.matchMedia

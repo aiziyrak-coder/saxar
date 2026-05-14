@@ -4,7 +4,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Package, Building, Phone, FileText, ArrowLeft } from 'lucide-react';
-import { getFirebaseAuth, getFirebaseDb, isFirebaseConfigured } from '../../firebase';
+import { getFirebaseAuth, tryGetFirebaseDb, isFirebaseConfigured } from '../../firebase';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { persistDemoUser } from '../../constants/branding';
@@ -72,7 +72,12 @@ export default function Register() {
       await updateProfile(result.user, { displayName: companyName });
       const uid = result.user.uid;
       const now = new Date().toISOString();
-      await setDoc(doc(getFirebaseDb(), 'users', uid), {
+      const db = tryGetFirebaseDb();
+      if (!db) {
+        setError('Firestore mavjud emas. Konfiguratsiyani tekshiring.');
+        return;
+      }
+      await setDoc(doc(db, 'users', uid), {
         uid,
         email: syntheticEmail,
         phone: formData.phone.trim(),
@@ -85,7 +90,7 @@ export default function Register() {
         createdAt: now,
         updatedAt: now,
       });
-      await setDoc(doc(getFirebaseDb(), 'clients', uid), {
+      await setDoc(doc(db, 'clients', uid), {
         id: uid,
         name: companyName,
         ownerName: companyName,
@@ -234,7 +239,8 @@ export default function Register() {
                 />
               </div>
               <p className="mt-1 text-xs text-slate-500">
-                Ro'yxatdan keyin kirish paroli tizim tomonidan belgilanadi (demo rejimda avtomatik).
+                SMS orqali tasdiqlash yo‘q — raqam faqat kirish identifikatori sifatida ishlatiladi. Parol tizim
+                tomonidan belgilanadi (demo rejimda avtomatik).
               </p>
             </div>
 

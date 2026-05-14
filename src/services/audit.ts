@@ -8,8 +8,8 @@ export async function logAudit(
   userId: string,
   userName: string,
   userRole: UserRole,
-  oldData?: Record<string, any>,
-  newData?: Record<string, any>
+  oldData?: Record<string, unknown>,
+  newData?: Record<string, unknown>
 ): Promise<void> {
   try {
     await auditLogService.create({

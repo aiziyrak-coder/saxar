@@ -7,10 +7,13 @@ import { useAuth } from '../../context/AuthContext';
 import { useFirestore } from '../../hooks/useFirestore';
 import { orderService, paymentService } from '../../services/firestore';
 import { logAudit, AuditActions, EntityTypes } from '../../services/audit';
+import { getQueuedItems, processQueue } from '../../services/offlineQueue';
 import type { Order, Payment } from '../../types';
 
 export default function DriverDashboard() {
   const { user, userData } = useAuth();
+  const [queueCount, setQueueCount] = useState(0);
+  const [syncing, setSyncing] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<GeolocationPosition | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showReturnModal, setShowReturnModal] = useState(false);
@@ -73,6 +76,10 @@ export default function DriverDashboard() {
       };
 
       const paymentId = await paymentService.create(payment);
+      if (!paymentId) {
+        console.error('To‘lov yozilmadi: Firebase sozlanmagan.');
+        return;
+      }
       if (userData) {
         await logAudit(AuditActions.PAYMENT_CREATE, EntityTypes.PAYMENT, paymentId, user?.uid || '', userData.name || 'Dastavkachi', userData.role, undefined, { amount: parseInt(paymentAmount), orderId: selectedOrder.id, type: payment.type });
       }
@@ -123,8 +130,43 @@ export default function DriverDashboard() {
     return new Intl.NumberFormat('uz-UZ').format(amount);
   };
 
+  const refreshQueue = () => setQueueCount(getQueuedItems().length);
+
+  useEffect(() => {
+    refreshQueue();
+    const onVis = () => refreshQueue();
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
+
+  const handleSyncQueue = async () => {
+    setSyncing(true);
+    try {
+      const r = await processQueue();
+      refreshQueue();
+      if (r.synced > 0) {
+        /* Firestore sinxronlandi */
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {queueCount > 0 && (
+        <Card className="border-amber-300 bg-amber-50/90 text-amber-950 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="text-sm">
+            <strong>Offlayn navbat:</strong> {queueCount} ta yozuv serverga yuborilmagan. Internet tiklanganda sinxronlang.
+          </div>
+          <Button variant="primary" size="sm" disabled={syncing} onClick={() => void handleSyncQueue()}>
+            {syncing ? 'Sinxron…' : 'Sinxronlash'}
+          </Button>
+        </Card>
+      )}
+
       {/* Current Route Status */}
       <Card className="bg-white/70 text-slate-900 border border-emerald-200/60 shadow-xl relative overflow-hidden">
         <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/20 rounded-full blur-3xl -mr-10 -mt-10"></div>

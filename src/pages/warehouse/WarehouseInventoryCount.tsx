@@ -7,6 +7,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useFirestore } from '../../hooks/useFirestore';
 import { inventoryAdjustment } from '../../services/firestore';
 import { logAudit, AuditActions, EntityTypes } from '../../services/audit';
+import { notifyPlannedFeature } from '../../platform/notifications';
 import type { InventoryItem, Product } from '../../types';
 
 export default function WarehouseInventoryCount() {
@@ -102,7 +103,12 @@ export default function WarehouseInventoryCount() {
               onChange={(e) => { setSearch(e.target.value); setBarcodeInput(e.target.value); }}
             />
           </div>
-          <Button variant="outline" className="gap-2">
+          <Button
+            variant="outline"
+            className="gap-2"
+            type="button"
+            onClick={() => notifyPlannedFeature('Shtrix-kod skaner', 'Kamera/USB skaner rejada.')}
+          >
             <Barcode className="h-4 w-4" /> Skaner
           </Button>
           {hasChanges && (

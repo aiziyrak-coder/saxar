@@ -1,8 +1,11 @@
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Package, ArrowRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { notifyPlannedFeature } from '../../platform/notifications';
 
 export default function ProductionTransfer() {
+  const navigate = useNavigate();
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-slate-900">Tayyor mahsulotni omborga o‘tkazish</h1>
@@ -21,7 +24,15 @@ export default function ProductionTransfer() {
             </div>
           </div>
           <p className="mb-4">Ishlab chiqarish → Ombor (WMS kirim)</p>
-          <Button variant="primary" className="gap-2">
+          <Button
+            variant="primary"
+            className="gap-2"
+            type="button"
+            onClick={() => {
+              notifyPlannedFeature('WMS kirim', 'Tayyor mahsulotni omborga yozish rejada.');
+              navigate('/warehouse/wms');
+            }}
+          >
             Kirim qilish
           </Button>
         </div>

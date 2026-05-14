@@ -53,3 +53,7 @@ Frontenddan JWT bilan ishlash uchun `Authorization: Bearer <token>` headeri yubo
 
 - `GET /api/health/` — DB bilan readiness (`DJANGO_HEALTH_CHECK_DB=0` bo'lsa faqat jarayon).
 
+## 5. Migratsiya xatolari (SQLite dev)
+
+Agar `django.db.utils.OperationalError` yoki migratsiya tarixidagi nomuvofiqlik chiqsa, dev muhitda `db.sqlite3` ni o'chirib qayta `python manage.py migrate` qiling (ma'lumotlar yo'qoladi). `sales`, `finance`, `logistics`, `production` jadvallari endi migratsiyalar orqali yaratiladi.
+

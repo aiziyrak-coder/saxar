@@ -9,13 +9,27 @@ export default function WarehouseDashboard() {
   const [lowStockCount, setLowStockCount] = useState(0);
 
   useEffect(() => {
-    Promise.all([
-      getExpiringInventory(7).then(items => items.length),
-      getLowStockProducts().then(items => items.length),
-    ]).then(([exp, low]) => {
-      setExpiringCount(exp);
-      setLowStockCount(low);
-    });
+    let cancelled = false;
+    (async () => {
+      try {
+        const [exp, low] = await Promise.all([
+          getExpiringInventory(7).then((items) => items.length),
+          getLowStockProducts().then((items) => items.length),
+        ]);
+        if (!cancelled) {
+          setExpiringCount(exp);
+          setLowStockCount(low);
+        }
+      } catch {
+        if (!cancelled) {
+          setExpiringCount(0);
+          setLowStockCount(0);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const links = [
