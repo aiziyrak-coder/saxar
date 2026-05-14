@@ -151,70 +151,88 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-50 text-zinc-800 flex flex-col justify-center px-4 sm:px-6 lg:px-8 relative overflow-hidden antialiased">
+    <div
+      className={
+        'min-h-screen flex flex-col justify-center px-4 sm:px-6 lg:px-8 relative overflow-hidden antialiased ' +
+        'bg-zinc-50 text-zinc-900 dark:bg-zinc-50 dark:text-zinc-900 ' +
+        '[color-scheme:light]'
+      }
+    >
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute right-0 top-0 h-72 w-72 rounded-full bg-emerald-200/25 blur-3xl" />
+        <div className="absolute right-0 top-0 h-72 w-72 rounded-full bg-emerald-200/35 blur-3xl" />
+        <div className="absolute left-0 bottom-0 h-64 w-64 rounded-full bg-emerald-100/40 blur-3xl" />
       </div>
       <div className="w-full relative z-10 flex flex-col items-center">
-        <div className="w-full flex justify-start mb-4">
+        <div className="w-full max-w-md mx-auto flex justify-start mb-4">
           <Button
             variant="outline"
             size="sm"
-            className="gap-2"
+            className="gap-2 border-zinc-300 bg-white text-zinc-900 shadow-sm hover:bg-zinc-50 dark:border-zinc-300 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-50"
             onClick={() => navigate('/')}
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className="h-4 w-4 text-zinc-800" />
             Bosh sahifa
           </Button>
         </div>
-        <div className="flex justify-center text-emerald-600 mb-4">
-          <Package className="h-10 w-10" />
+        <div className="flex justify-center text-emerald-700 mb-3 drop-shadow-sm">
+          <Package className="h-11 w-11" strokeWidth={2} />
         </div>
-        <h2 className="text-center text-2xl sm:text-3xl font-semibold text-zinc-900 tracking-tight">
+        <h2 className="text-center text-2xl sm:text-3xl font-bold text-zinc-950 tracking-tight dark:text-zinc-950">
           B2B Ro'yxatdan o'tish
         </h2>
-        <p className="mt-2 text-center text-xs sm:text-sm text-zinc-600">
+        <p className="mt-2 max-w-md text-center text-xs sm:text-sm text-zinc-600 leading-relaxed dark:text-zinc-600">
           Ulgurji narxlarda xarid qilish uchun do'koningizni ro'yxatdan o'tkazing
         </p>
       </div>
 
-      <div className="w-full relative z-10 flex justify-center">
-        <Card className="p-4 sm:p-6 sm:rounded-3xl w-full max-w-md mx-auto overflow-hidden">
+      <div className="w-full relative z-10 flex justify-center mt-6">
+        <Card
+          className={
+            'p-4 sm:p-6 sm:rounded-3xl w-full max-w-md mx-auto overflow-hidden ' +
+            'border border-zinc-200/90 bg-white text-zinc-900 shadow-xl shadow-zinc-900/5 ' +
+            'ring-1 ring-zinc-200/70 dark:border-zinc-200/90 dark:bg-white dark:text-zinc-900 ' +
+            'dark:shadow-xl dark:shadow-zinc-900/8 dark:ring-zinc-200/70'
+          }
+        >
           {error && (
-            <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100">
+            <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-xl border border-red-100 dark:bg-red-50 dark:text-red-700">
               {error}
             </div>
           )}
 
-          <form className="space-y-4" onSubmit={handleSubmit}>
+          <form className="space-y-5" onSubmit={handleSubmit}>
             <div>
-              <label className="block text-sm font-medium text-slate-700">STIR (INN)</label>
-              <div className="mt-1 relative rounded-md shadow-sm">
+              <label className="block text-sm font-semibold text-zinc-900 dark:text-zinc-900">STIR (INN)</label>
+              <div className="mt-1.5 relative rounded-lg shadow-sm">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <FileText className="h-5 w-5 text-slate-400" />
+                  <FileText className="h-5 w-5 text-emerald-800/90" strokeWidth={2} />
                 </div>
                 <Input
                   type="text"
                   required
-                  className="pl-10"
+                  className="pl-10 border-zinc-200 bg-white text-zinc-900 placeholder:text-zinc-500 dark:border-zinc-200 dark:bg-white dark:text-zinc-900 dark:placeholder:text-zinc-500"
                   placeholder="9 raqamli STIR"
                   value={formData.inn}
                   onChange={(e) => setFormData({ ...formData, inn: e.target.value })}
                 />
               </div>
-              <p className="mt-1 text-xs text-slate-500">9 raqamli korxona identifikatori</p>
+              <p className="mt-1.5 text-xs text-zinc-600 leading-snug dark:text-zinc-600">
+                9 raqamli korxona identifikatori
+              </p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700">Korxona (Do'kon) nomi</label>
-              <div className="mt-1 relative rounded-md shadow-sm">
+              <label className="block text-sm font-semibold text-zinc-900 dark:text-zinc-900">
+                Korxona (Do'kon) nomi
+              </label>
+              <div className="mt-1.5 relative rounded-lg shadow-sm">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Building className="h-5 w-5 text-slate-400" />
+                  <Building className="h-5 w-5 text-emerald-800/90" strokeWidth={2} />
                 </div>
                 <Input
                   type="text"
                   required
-                  className="pl-10"
+                  className="pl-10 border-zinc-200 bg-white text-zinc-900 placeholder:text-zinc-500 dark:border-zinc-200 dark:bg-white dark:text-zinc-900 dark:placeholder:text-zinc-500"
                   placeholder="Masalan: Omadli Savdo MChJ"
                   value={formData.companyName}
                   onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
@@ -223,37 +241,37 @@ export default function Register() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700">Telefon raqam</label>
-              <div className="mt-1 relative rounded-md shadow-sm">
+              <label className="block text-sm font-semibold text-zinc-900 dark:text-zinc-900">Telefon raqam</label>
+              <div className="mt-1.5 relative rounded-lg shadow-sm">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Phone className="h-5 w-5 text-slate-400" />
+                  <Phone className="h-5 w-5 text-emerald-800/90" strokeWidth={2} />
                 </div>
                 <Input
                   type="tel"
                   required
-                  className="pl-10"
+                  className="pl-10 border-zinc-200 bg-white text-zinc-900 placeholder:text-zinc-500 dark:border-zinc-200 dark:bg-white dark:text-zinc-900 dark:placeholder:text-zinc-500"
                   placeholder="+998 90 123 45 67"
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                 />
               </div>
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="mt-1.5 text-xs text-zinc-600 leading-relaxed dark:text-zinc-600">
                 SMS orqali tasdiqlash yo‘q — raqam faqat kirish identifikatori sifatida ishlatiladi. Parol tizim
                 tomonidan belgilanadi (demo rejimda avtomatik).
               </p>
             </div>
 
-            <Button type="submit" variant="primary" className="w-full justify-center" disabled={loading}>
+            <Button type="submit" variant="primary" className="w-full justify-center py-2.5 font-semibold" disabled={loading}>
               {loading ? 'Ro\'yxatdan o\'tilyapti...' : 'Ro\'yxatdan o\'tish'}
             </Button>
           </form>
 
-          <div className="mt-4 text-center text-sm">
-            <span className="text-slate-600">Akkauntingiz bormi? </span>
+          <div className="mt-5 text-center text-sm text-zinc-700 dark:text-zinc-700">
+            <span>Akkauntingiz bormi? </span>
             <button
               type="button"
               onClick={() => navigate('/login')}
-              className="font-medium text-emerald-700 hover:text-emerald-600"
+              className="font-semibold text-emerald-700 hover:text-emerald-800 underline-offset-2 hover:underline"
             >
               Tizimga kirish
             </button>

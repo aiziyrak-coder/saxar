@@ -64,10 +64,22 @@ export function erpHomePathForRole(role: UserRole | undefined): string {
 }
 
 /**
- * `VITE_ALLOW_DEMO_LOGIN=false` (build vaqtida) — demo rol tugmalari va standart parol UI dan olib tashlanadi.
+ * `VITE_ALLOW_DEMO_LOGIN=false` (build vaqtida) — standart demo parol matni (bo‘sh parol fallback) yashiriladi.
  * Boshqa qiymat yoki bo‘sh — demo ruxsat (ishlab chiqarish / lokal Docker).
  */
 export function isDemoLoginUiAllowed(): boolean {
   const v = String(import.meta.env.VITE_ALLOW_DEMO_LOGIN ?? '').trim().toLowerCase();
   return v !== 'false' && v !== '0' && v !== 'no';
+}
+
+/**
+ * Login sahifasidagi «demo rol» tugmalari (Admin, Buxgalter, …).
+ * `VITE_SHOW_DEMO_ROLE_LOGIN` berilsa, u ustun; bo‘sh bo‘lsa — `isDemoLoginUiAllowed()` bilan bir xil.
+ * Prod’da `VITE_ALLOW_DEMO_LOGIN=false` bo‘lsa ham tugmalar kerak bo‘lsa: `VITE_SHOW_DEMO_ROLE_LOGIN=true`.
+ */
+export function isDemoRoleQuickLoginUiAllowed(): boolean {
+  const raw = String(import.meta.env.VITE_SHOW_DEMO_ROLE_LOGIN ?? '').trim().toLowerCase();
+  if (raw === 'true' || raw === '1' || raw === 'yes') return true;
+  if (raw === 'false' || raw === '0' || raw === 'no') return false;
+  return isDemoLoginUiAllowed();
 }

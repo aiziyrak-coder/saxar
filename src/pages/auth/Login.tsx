@@ -3,11 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { Package, Phone, ArrowLeft, Lock } from 'lucide-react';
+import { Package, Phone, ArrowLeft, Lock, ShieldCheck } from 'lucide-react';
 import { getFirebaseAuth, tryGetFirebaseDb, isFirebaseConfigured } from '../../firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { BRAND, isDemoLoginUiAllowed, persistDemoUser } from '../../constants/branding';
+import {
+  BRAND,
+  isDemoLoginUiAllowed,
+  isDemoRoleQuickLoginUiAllowed,
+  persistDemoUser,
+} from '../../constants/branding';
 import { DEV_ROLE_ORDER, DEV_ROLE_PHONE_CREDENTIALS } from '../../constants/devRoleLogins';
 import { logger } from '../../services/logger';
 import type { UserRole } from '../../types';
@@ -126,8 +131,8 @@ export default function Login() {
   };
 
   const handleRoleQuickLogin = async (role: UserRole) => {
-    if (!isDemoLoginUiAllowed()) {
-      setError('Demo kirish o‘chirilgan. Administrator bilan bog‘laning.');
+    if (!isDemoRoleQuickLoginUiAllowed()) {
+      setError('Rol bo‘yicha tezkir kirish o‘chirilgan (.env: VITE_SHOW_DEMO_ROLE_LOGIN).');
       return;
     }
     const creds = DEV_ROLE_PHONE_CREDENTIALS[role];
@@ -223,66 +228,96 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-50 text-zinc-800 flex flex-col justify-center px-4 sm:px-6 lg:px-8 relative overflow-hidden antialiased">
+    <div
+      className={
+        'min-h-screen flex flex-col justify-center px-4 sm:px-6 lg:px-8 relative overflow-hidden antialiased ' +
+        'bg-zinc-50 text-zinc-900 dark:bg-zinc-50 dark:text-zinc-900 [color-scheme:light]'
+      }
+    >
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute right-0 top-0 h-72 w-72 rounded-full bg-emerald-200/25 blur-3xl" />
+        <div className="absolute right-0 top-0 h-72 w-72 rounded-full bg-emerald-200/35 blur-3xl" />
+        <div className="absolute left-0 bottom-0 h-64 w-64 rounded-full bg-emerald-100/40 blur-3xl" />
       </div>
-      <div className="w-full relative z-10 flex flex-col items-center">
-        <div className="w-full flex justify-start">
+
+      <div className="w-full max-w-lg mx-auto relative z-10 flex flex-col items-stretch">
+        <div className="flex justify-start mb-3">
           <Button
             variant="outline"
             size="sm"
-            className="gap-2 border-emerald-200/60 bg-white/60 hover:bg-white transition-colors"
+            className="gap-2 border-zinc-300 bg-white text-zinc-900 shadow-sm hover:bg-zinc-50 dark:border-zinc-300 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-50"
             onClick={() => navigate('/')}
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className="h-4 w-4 text-zinc-800" />
             Bosh sahifa
           </Button>
         </div>
-        <div className="flex justify-center text-emerald-600 mb-3 sm:mb-5">
-          <Package className="h-10 w-10" />
+        <div className="flex justify-center text-emerald-700 mb-2">
+          <Package className="h-10 w-10" strokeWidth={2} />
         </div>
-        <h2 className="text-center text-2xl sm:text-3xl font-semibold text-zinc-900 tracking-tight">
+        <h2 className="text-center text-2xl sm:text-3xl font-bold text-zinc-950 tracking-tight dark:text-zinc-950">
           Tizimga kirish
         </h2>
-        <p className="mt-2 text-center text-xs sm:text-sm text-slate-600">
+        <p className="mt-1 text-center text-xs sm:text-sm text-zinc-600 dark:text-zinc-600">
           {BRAND.erpProductName} — tizimga kirish
         </p>
+
+        {isDemoRoleQuickLoginUiAllowed() && (
+          <div
+            className={
+              'mt-5 rounded-2xl border border-emerald-200/90 bg-emerald-50/95 p-4 shadow-md ' +
+              'ring-1 ring-emerald-900/5 dark:border-emerald-200/90 dark:bg-emerald-50 dark:ring-emerald-900/5'
+            }
+          >
+            <div className="flex gap-3 mb-3">
+              <ShieldCheck className="h-9 w-9 shrink-0 text-emerald-800" strokeWidth={2} aria-hidden />
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-zinc-900">Demo: ERP rollariga tezkir kirish</p>
+                <p className="text-xs text-zinc-600 mt-0.5 leading-snug">
+                  Tugmani bosing — telefon va parol avtomatik to‘ldiriladi va tizimga kiriladi. Har rol uchun alohida
+                  demo parol (prod’da ham ishlaydi).
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {DEV_ROLE_ORDER.map((role) => {
+                const c = DEV_ROLE_PHONE_CREDENTIALS[role];
+                return (
+                  <Button
+                    key={role}
+                    type="button"
+                    variant="outline"
+                    className={
+                      'h-auto flex-col items-stretch py-2.5 px-3 text-left gap-1 ' +
+                      'border-emerald-300/90 bg-white text-zinc-900 shadow-sm ' +
+                      'hover:bg-emerald-100/70 hover:border-emerald-400 ' +
+                      'dark:border-emerald-300/90 dark:bg-white dark:text-zinc-900 dark:hover:bg-emerald-100/70'
+                    }
+                    disabled={loading}
+                    onClick={() => void handleRoleQuickLogin(role)}
+                  >
+                    <span className="text-xs font-bold text-emerald-950 w-full">{c.title}</span>
+                    <span className="text-[11px] text-zinc-700 w-full select-all font-mono">{c.phone}</span>
+                    <span className="text-[11px] text-zinc-600 w-full select-all font-mono">Parol: {c.password}</span>
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
-      <div className="w-full relative z-10 flex justify-center">
-        <Card className="p-4 sm:p-6 sm:rounded-3xl w-full max-w-lg mx-auto overflow-hidden">
+      <div className="w-full relative z-10 flex justify-center mt-5">
+        <Card
+          className={
+            'p-4 sm:p-6 sm:rounded-3xl w-full max-w-lg mx-auto overflow-hidden ' +
+            'border border-zinc-200/90 bg-white text-zinc-900 shadow-xl shadow-zinc-900/5 ' +
+            'ring-1 ring-zinc-200/70 dark:border-zinc-200/90 dark:bg-white dark:text-zinc-900 ' +
+            'dark:shadow-xl dark:shadow-zinc-900/8 dark:ring-zinc-200/70'
+          }
+        >
           {error && (
-            <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100">
+            <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-xl border border-red-100 dark:bg-red-50 dark:text-red-700">
               {error}
-            </div>
-          )}
-
-          {isDemoLoginUiAllowed() && (
-            <div className="mb-5">
-              <p className="text-center text-sm font-semibold text-slate-800 mb-1">Demo: rol bo‘yicha kirish</p>
-              <p className="text-center text-xs text-slate-500 mb-3">
-                Tugmani bosing — telefon va parol maydonda to‘ldiriladi va tizimga kiriladi.
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {DEV_ROLE_ORDER.map((role) => {
-                  const c = DEV_ROLE_PHONE_CREDENTIALS[role];
-                  return (
-                    <Button
-                      key={role}
-                      type="button"
-                      variant="outline"
-                      className="h-auto flex-col items-stretch py-2.5 px-3 text-left gap-1 border-emerald-200/80 bg-white/90 hover:bg-emerald-50/80"
-                      disabled={loading}
-                      onClick={() => void handleRoleQuickLogin(role)}
-                    >
-                      <span className="text-xs font-bold text-emerald-900 w-full">{c.title}</span>
-                      <span className="text-[11px] text-slate-600 w-full select-all font-mono">{c.phone}</span>
-                      <span className="text-[11px] text-slate-500 w-full select-all font-mono">Parol: {c.password}</span>
-                    </Button>
-                  );
-                })}
-              </div>
             </div>
           )}
 
