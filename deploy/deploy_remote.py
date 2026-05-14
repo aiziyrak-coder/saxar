@@ -2,9 +2,11 @@
 """
 Masofadan SaxarERP deploy: SSH orqali `remote_bootstrap.sh` ni serverga yuklaydi va ishga tushiradi.
 
-Parolni repoga yozmang. Quyidagilardan biri:
+Parolni repoga yozmang. Autentifikatsiya (bittasi yetarli):
   - SAXAR_SSH_PASSWORD muhit o'zgaruvchisi
   - SAXAR_SSH_PASSWORD_FILE — bir qatorli parol fayli (masalan ~/.saxar_ssh, 600 huquq)
+  - SSH kalit: SAXAR_SSH_KEY_FILE yoki parol yo'q bo'lsa ~/.ssh/id_ed25519 / ~/.ssh/id_rsa
+    (shifrlangan kalit uchun SAXAR_SSH_KEY_PASSPHRASE)
 
 Ixtiyoriy:
   - SAXAR_SSH_HOST (default: 167.71.53.238)
@@ -37,11 +39,64 @@ def _read_password() -> str:
         p = Path(path).expanduser()
         if p.is_file():
             return p.read_text(encoding="utf-8").strip()
+    return ""
+
+
+def _key_passphrase() -> str | None:
+    p = (os.environ.get("SAXAR_SSH_KEY_PASSPHRASE") or "").strip()
+    return p if p else None
+
+
+def _load_private_key(key_path: Path) -> paramiko.PKey:
+    """Try common key types until one loads (Ed25519, RSA, ECDSA)."""
+    passphrase = _key_passphrase()
+    pw_arg: str | bytes | None = passphrase if passphrase else None
+    last_err: Exception | None = None
+    for cls in (paramiko.Ed25519Key, paramiko.RSAKey, paramiko.ECDSAKey):
+        try:
+            return cls.from_private_key_file(str(key_path), password=pw_arg)
+        except paramiko.PasswordRequiredException as e:
+            print(
+                "SSH kaliti shifrlangan. SAXAR_SSH_KEY_PASSPHRASE o'rnating "
+                "yoki server parolini SAXAR_SSH_PASSWORD / SAXAR_SSH_PASSWORD_FILE orqali bering.",
+                file=sys.stderr,
+            )
+            raise SystemExit(2) from e
+        except paramiko.SSHException as e:
+            last_err = e
+            continue
+    msg = f"Kalitni o'qib bo'lmadi: {key_path}"
+    if last_err:
+        msg += f" ({last_err})"
+    raise SystemExit(2) from last_err
+
+
+def _resolve_auth() -> tuple[str | None, paramiko.PKey | None]:
+    """Parol yoki kalit (SAXAR_SSH_KEY_FILE yoki parol yo'q bo'lsa ~/.ssh/id_*)."""
+    password = _read_password()
+    key_file = (os.environ.get("SAXAR_SSH_KEY_FILE") or "").strip()
+
+    if key_file:
+        kp = Path(key_file).expanduser()
+        if not kp.is_file():
+            print(f"SAXAR_SSH_KEY_FILE topilmadi: {kp}", file=sys.stderr)
+            raise SystemExit(2)
+        return (password or None, _load_private_key(kp))
+
+    if password:
+        return (password, None)
+
+    home = Path.home() / ".ssh"
+    for name in ("id_ed25519", "id_rsa"):
+        kp = home / name
+        if kp.is_file():
+            return (None, _load_private_key(kp))
+
     print(
-        "SSH paroli topilmadi. PowerShell misol:\n"
-        "  $env:SAXAR_SSH_PASSWORD='...'\n"
-        "  python deploy/deploy_remote.py\n"
-        "Yoki fayl: SAXAR_SSH_PASSWORD_FILE=C:\\Users\\You\\.saxar_ssh",
+        "SSH autentifikatsiya topilmadi. Variantlar:\n"
+        "  Parol: $env:SAXAR_SSH_PASSWORD='...' yoki SAXAR_SSH_PASSWORD_FILE\n"
+        "  Kalit: SAXAR_SSH_KEY_FILE yoki ~/.ssh/id_ed25519 / id_rsa\n"
+        "  Shifrlangan kalit: SAXAR_SSH_KEY_PASSPHRASE",
         file=sys.stderr,
     )
     raise SystemExit(2)
@@ -88,7 +143,7 @@ def _stream_exec(client: paramiko.SSHClient, command: str, timeout_sec: int = 36
 def main() -> int:
     host = os.environ.get("SAXAR_SSH_HOST", "167.71.53.238").strip()
     user = os.environ.get("SAXAR_SSH_USER", "root").strip()
-    password = _read_password()
+    password, pkey = _resolve_auth()
     cert_email = (os.environ.get("SAXAR_CERTBOT_EMAIL") or "").strip()
     repo_url = os.environ.get("SAXAR_REPO_URL", "https://github.com/aiziyrak-coder/saxar.git").strip()
     branch = os.environ.get("SAXAR_BRANCH", "main").strip()
@@ -100,14 +155,18 @@ def main() -> int:
 
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect(
-        hostname=host,
-        username=user,
-        password=password,
-        timeout=45,
-        look_for_keys=False,
-        allow_agent=False,
-    )
+    connect_kw: dict = {
+        "hostname": host,
+        "username": user,
+        "timeout": 45,
+        "look_for_keys": False,
+        "allow_agent": False,
+    }
+    if pkey is not None:
+        connect_kw["pkey"] = pkey
+    if password:
+        connect_kw["password"] = password
+    client.connect(**connect_kw)
 
     try:
         remote_path = "/tmp/saxar_bootstrap.sh"
