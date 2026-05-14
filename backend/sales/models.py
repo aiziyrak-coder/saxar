@@ -11,6 +11,7 @@ class Order(models.Model):
         ("in_transit", "Yo‘lda"),
         ("delivered", "Yetkazildi"),
         ("returned", "Qaytdi"),
+        ("cancelled", "Bekor qilindi"),
     ]
     source = models.CharField(max_length=20, default="b2b")  # b2b/agent
     client = models.ForeignKey(

@@ -23,6 +23,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/health/", health_check),
     path("api/accounts/", include("accounts.urls")),
+    path("api/telegram/", include("telegram_bot.urls")),
     path("api/", include(router.urls)),
     path("api-auth/", include("rest_framework.urls")),  # DRF login/logout
 ]

@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "logistics",
     "production",
     "b2b",
+    "telegram_bot",
 ]
 
 AUTH_USER_MODEL = "accounts.User"

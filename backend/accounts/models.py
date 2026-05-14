@@ -19,6 +19,13 @@ class User(AbstractUser):
     company_name = models.CharField(max_length=255, blank=True)
     region = models.CharField(max_length=100, blank=True)
     address = models.CharField(max_length=255, blank=True)
+    # Telegram: admin kiritadi @username; mijoz/hodim /start yoki havola bilan bog‘laydi
+    telegram_chat_id = models.BigIntegerField(null=True, blank=True, db_index=True)
+    telegram_username = models.CharField(
+        max_length=64,
+        blank=True,
+        help_text="Telegram @username (sizsiz), admin paneldan",
+    )
 
     def __str__(self) -> str:  # pragma: no cover - simple
         return f"{self.username} ({self.get_role_display()})"

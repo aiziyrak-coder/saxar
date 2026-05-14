@@ -15,7 +15,10 @@ class UserSerializer(serializers.ModelSerializer):
             "company_name",
             "region",
             "address",
+            "telegram_username",
+            "telegram_chat_id",
         ]
+        read_only_fields = ["telegram_chat_id"]
 
 
 class RegisterB2BSerializer(serializers.ModelSerializer):

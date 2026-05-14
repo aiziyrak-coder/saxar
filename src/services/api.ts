@@ -309,6 +309,29 @@ export const paymentApi = {
   getAll: () => api.get<ApiPaymentRow[]>('/payments/'),
 };
 
+export interface TelegramSettingsDto {
+  admin_group_id: number;
+  notify_new_orders: boolean;
+  notify_payments: boolean;
+  notify_expenses: boolean;
+  notify_order_status: boolean;
+  bot_username: string;
+  bot_token_configured: boolean;
+  webhook_secret_configured: boolean;
+  updated_at: string;
+}
+
+export const telegramApi = {
+  getSettings: () => api.get<TelegramSettingsDto>('/telegram/settings/'),
+  putSettings: (data: Partial<TelegramSettingsDto>) => api.put<TelegramSettingsDto>('/telegram/settings/', data),
+  getInviteLink: () => api.get<{ invite_url: string; start_param: string }>('/telegram/invite-link/'),
+  adminBindUserTelegram: (userId: number, telegram_username: string) =>
+    api.patch<{ id: number; telegram_username: string; telegram_chat_id: number | null }>(
+      `/telegram/user/${userId}/telegram/`,
+      { telegram_username }
+    ),
+};
+
 // ==================== TYPES ====================
 
 interface Category {

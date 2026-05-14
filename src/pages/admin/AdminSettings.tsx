@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
-import { Users, Percent, Shield, Database, Bell, Plus, Loader2 } from 'lucide-react';
+import { Users, Percent, Shield, Database, Bell, Plus, Loader2, Send } from 'lucide-react';
 import { useFirestore } from '../../hooks/useFirestore';
 import { promotionService } from '../../services/firestore';
 import type { Promotion } from '../../types';
+import { telegramApi, ApiError, type TelegramSettingsDto } from '../../services/api';
 
 const PROMO_TYPES = [
   { value: 'percent', label: 'Foiz chegirma (%)' },
@@ -14,8 +15,226 @@ const PROMO_TYPES = [
   { value: 'buy_x_get_y', label: 'X ta olsa Y ta tekin' },
 ] as const;
 
+function TelegramSettingsPanel() {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [bindBusy, setBindBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [okMsg, setOkMsg] = useState<string | null>(null);
+  const [settings, setSettings] = useState<TelegramSettingsDto | null>(null);
+  const [groupId, setGroupId] = useState('');
+  const [notifyNewOrders, setNotifyNewOrders] = useState(true);
+  const [notifyPayments, setNotifyPayments] = useState(true);
+  const [notifyExpenses, setNotifyExpenses] = useState(true);
+  const [notifyOrderStatus, setNotifyOrderStatus] = useState(true);
+  const [inviteUrl, setInviteUrl] = useState('');
+  const [bindUserId, setBindUserId] = useState('');
+  const [bindUsername, setBindUsername] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setErr(null);
+    setOkMsg(null);
+    try {
+      const s = await telegramApi.getSettings();
+      setSettings(s);
+      setGroupId(String(s.admin_group_id));
+      setNotifyNewOrders(s.notify_new_orders);
+      setNotifyPayments(s.notify_payments);
+      setNotifyExpenses(s.notify_expenses);
+      setNotifyOrderStatus(s.notify_order_status);
+      try {
+        const inv = await telegramApi.getInviteLink();
+        setInviteUrl(inv.invite_url);
+      } catch {
+        setInviteUrl('');
+      }
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : 'Ma’lumotni yuklab bo‘lmadi (JWT / admin huquqi).');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const saveSettings = async () => {
+    setSaving(true);
+    setErr(null);
+    setOkMsg(null);
+    try {
+      const gid = Number(groupId);
+      if (!Number.isFinite(gid)) {
+        setErr('Guruh ID raqam bo‘lishi kerak.');
+        return;
+      }
+      const s = await telegramApi.putSettings({
+        admin_group_id: gid,
+        notify_new_orders: notifyNewOrders,
+        notify_payments: notifyPayments,
+        notify_expenses: notifyExpenses,
+        notify_order_status: notifyOrderStatus,
+      });
+      setSettings(s);
+      setOkMsg('Sozlamalar saqlandi.');
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : 'Saqlashda xato');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const copyInvite = async () => {
+    if (!inviteUrl) return;
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      setOkMsg('Havola nusxalandi.');
+    } catch {
+      setOkMsg(inviteUrl);
+    }
+  };
+
+  const bindUser = async () => {
+    const uid = Number(bindUserId);
+    if (!Number.isFinite(uid) || uid < 1) {
+      setErr('Foydalanuvchi ID butun son bo‘lishi kerak.');
+      return;
+    }
+    setBindBusy(true);
+    setErr(null);
+    setOkMsg(null);
+    try {
+      await telegramApi.adminBindUserTelegram(uid, bindUsername.trim());
+      setOkMsg(`Foydalanuvchi #${uid} uchun Telegram username yangilandi.`);
+      setBindUsername('');
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : 'Bog‘lashda xato');
+    } finally {
+      setBindBusy(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <Card className="flex items-center gap-2 p-8 text-slate-600">
+        <Loader2 className="h-5 w-5 animate-spin" /> Yuklanmoqda...
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="space-y-6 p-6">
+      <div>
+        <h3 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-3">Telegram bot (buyurtma, to‘lov, guruh)</h3>
+        <p className="text-sm text-slate-600 mt-2">
+          Server <code className="text-xs bg-slate-100 px-1 rounded">.env</code> da{' '}
+          <code className="text-xs bg-slate-100 px-1 rounded">TELEGRAM_BOT_TOKEN</code> va{' '}
+          <code className="text-xs bg-slate-100 px-1 rounded">TELEGRAM_WEBHOOK_SECRET</code> bo‘lishi kerak. Webhook:{' '}
+          <code className="text-xs break-all">python manage.py set_telegram_webhook https://.../api/telegram/webhook/</code>
+        </p>
+      </div>
+
+      {err && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{err}</p>}
+      {okMsg && <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">{okMsg}</p>}
+
+      <div className="grid gap-4 sm:grid-cols-2 text-sm">
+        <div>
+          <span className="text-slate-600">Bot token (.env):</span>{' '}
+          <strong>{settings?.bot_token_configured ? 'bor ✅' : 'yo‘q ❌'}</strong>
+        </div>
+        <div>
+          <span className="text-slate-600">Webhook secret:</span>{' '}
+          <strong>{settings?.webhook_secret_configured ? 'bor ✅' : 'yo‘q ❌'}</strong>
+        </div>
+        <div>
+          <span className="text-slate-600">Bot @username:</span> <strong>@{settings?.bot_username || '—'}</strong>
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-1">Asosiy admin guruh ID (masalan -100…)</label>
+        <Input value={groupId} onChange={(e) => setGroupId(e.target.value)} placeholder="-1003852134921" />
+      </div>
+
+      <div className="space-y-2">
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={notifyNewOrders} onChange={(e) => setNotifyNewOrders(e.target.checked)} />
+          Yangi buyurtmalar guruhga
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={notifyPayments} onChange={(e) => setNotifyPayments(e.target.checked)} />
+          To‘lovlar guruhga + mijozga
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={notifyExpenses} onChange={(e) => setNotifyExpenses(e.target.checked)} />
+          Xarajatlar guruhga
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={notifyOrderStatus} onChange={(e) => setNotifyOrderStatus(e.target.checked)} />
+          Buyurtma holati o‘zgarsa guruh + mijoz
+        </label>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button variant="primary" onClick={saveSettings} disabled={saving} className="gap-2">
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          Saqlash
+        </Button>
+        <Button variant="outline" type="button" onClick={load}>
+          Yangilash
+        </Button>
+      </div>
+
+      <div className="border-t border-slate-100 pt-4 space-y-2">
+        <h4 className="font-medium text-slate-900">Shaxsiy bog‘lanish havolasi (joriy akkaunt)</h4>
+        <p className="text-xs text-slate-500">
+          Havolani hodim yoki mijozga yuboring; u Telegramda ochganda akkaunt bot bilan bog‘lanadi.
+        </p>
+        {inviteUrl ? (
+          <div className="flex flex-wrap gap-2 items-center">
+            <code className="text-xs bg-slate-100 rounded px-2 py-1 max-w-full break-all">{inviteUrl}</code>
+            <Button variant="outline" size="sm" type="button" onClick={copyInvite}>
+              Nusxalash
+            </Button>
+          </div>
+        ) : (
+          <p className="text-xs text-amber-700">Havola olinmadi — bot token / getMe ni tekshiring.</p>
+        )}
+      </div>
+
+      <div className="border-t border-slate-100 pt-4 space-y-3">
+        <h4 className="font-medium text-slate-900">Mijoz / hodim — Telegram username</h4>
+        <p className="text-xs text-slate-500">
+          Avvalo foydalanuvchi ID va Telegramdagi @username (sizsiz) kiriting. Keyin foydalanuvchi botga /start bosadi
+          yoki yuqoridagi havoladan foydalanadi.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
+          <Input
+            label="User ID"
+            type="number"
+            value={bindUserId}
+            onChange={(e) => setBindUserId(e.target.value)}
+            placeholder="masalan 12"
+          />
+          <Input
+            label="Telegram username (sizsiz)"
+            value={bindUsername}
+            onChange={(e) => setBindUsername(e.target.value)}
+            placeholder="masalan alisher_dev"
+          />
+          <Button variant="secondary" type="button" onClick={bindUser} disabled={bindBusy} className="shrink-0">
+            {bindBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Saqlash'}
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 export default function AdminSettings() {
-  const [activeTab, setActiveTab] = useState<'prices' | 'users' | 'security' | 'api' | 'sms'>('prices');
+  const [activeTab, setActiveTab] = useState<'prices' | 'users' | 'security' | 'api' | 'sms' | 'telegram'>('prices');
   const [showPromoModal, setShowPromoModal] = useState(false);
   const [promoForm, setPromoForm] = useState({
     name: '',
@@ -95,9 +314,17 @@ export default function AdminSettings() {
           <Button variant="ghost" className="w-full justify-start text-slate-600 hover:bg-slate-100" onClick={() => setActiveTab('sms')}>
             <Bell className="h-5 w-5 mr-3" /> Xabarnomalar (SMS)
           </Button>
+          <Button
+            variant="ghost"
+            className={`w-full justify-start ${activeTab === 'telegram' ? 'text-emerald-600 bg-emerald-50 font-bold' : 'text-slate-600 hover:bg-slate-100'}`}
+            onClick={() => setActiveTab('telegram')}
+          >
+            <Send className="h-5 w-5 mr-3" /> Telegram bot
+          </Button>
         </div>
 
         <div className="md:col-span-3 space-y-6">
+          {activeTab === 'telegram' && <TelegramSettingsPanel />}
           {activeTab === 'prices' && (
             <Card>
               <h3 className="text-lg font-bold text-slate-900 mb-6 border-b border-slate-100 pb-4">Narx siyosati va Aksiyalar</h3>
@@ -178,7 +405,7 @@ export default function AdminSettings() {
               </div>
             </Card>
           )}
-          {activeTab !== 'prices' && (
+          {activeTab !== 'prices' && activeTab !== 'telegram' && (
             <Card>
               <p className="text-slate-500">Ushbu bo‘lim sozlamalari keyingi yangilanishda qo‘shiladi.</p>
             </Card>
