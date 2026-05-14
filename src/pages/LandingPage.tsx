@@ -650,43 +650,7 @@ export default function LandingPage() {
     <div className="min-h-screen bg-zinc-50 text-zinc-800 flex flex-col antialiased">
       <div className="sticky top-0 z-50 bg-white/90 backdrop-blur-xl border-b border-zinc-200/90 shadow-[0_8px_30px_-14px_rgba(15,23,42,0.1)] relative">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-            <div className="flex items-center gap-3 min-w-0">
-              <div
-                className="shrink-0 h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center text-white font-semibold text-sm shadow-sm ring-1 ring-emerald-600/20"
-                aria-hidden
-              >
-                S
-              </div>
-              <div className="min-w-0">
-                <p className="text-[11px] font-medium text-zinc-500">{BRAND.siteHost}</p>
-                <p className="text-sm sm:text-base font-semibold text-zinc-900 tracking-tight truncate">
-                  {BRAND.name}
-                  <span className="text-zinc-500 font-normal"> — {BRAND.tagline}</span>
-                </p>
-                <p className="mt-0.5 hidden lg:block text-xs text-zinc-500 leading-snug max-w-2xl line-clamp-2">
-                  {BRAND.description}
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
-              <Link
-                to="/register"
-                className="inline-flex items-center justify-center rounded-full border border-zinc-200 bg-white px-4 py-2 text-xs sm:text-sm font-medium text-zinc-800 hover:bg-zinc-50 hover:border-zinc-300 transition-colors"
-              >
-                B2B ro&apos;yxatdan o&apos;tish
-              </Link>
-              <Link
-                to="/login"
-                className="inline-flex items-center gap-2 rounded-full bg-zinc-900 px-4 py-2 text-xs sm:text-sm font-medium text-white hover:bg-zinc-800 transition-colors shadow-sm"
-              >
-                <LayoutDashboard className="h-4 w-4 shrink-0 opacity-90" />
-                ERP ga kirish
-              </Link>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-2 border-t border-zinc-100 py-2.5 text-[11px] sm:text-xs text-zinc-600 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-4">
+          <div className="flex flex-col gap-2 py-2.5 text-[11px] sm:text-xs text-zinc-600 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-4">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
               <a
                 href={BRAND.siteUrl}
