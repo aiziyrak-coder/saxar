@@ -35,6 +35,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       /* */
     }
     document.documentElement.classList.toggle('dark', t === 'dark');
+    document.documentElement.style.colorScheme = t === 'dark' ? 'dark' : 'light';
   }, []);
 
   const toggleTheme = useCallback(() => {
@@ -46,12 +47,14 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         /* */
       }
       document.documentElement.classList.toggle('dark', next === 'dark');
+      document.documentElement.style.colorScheme = next === 'dark' ? 'dark' : 'light';
       return next;
     });
   }, []);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
+    document.documentElement.style.colorScheme = theme === 'dark' ? 'dark' : 'light';
   }, [theme]);
 
   const value = useMemo(() => ({ theme, setTheme, toggleTheme }), [theme, setTheme, toggleTheme]);

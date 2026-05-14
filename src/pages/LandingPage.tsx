@@ -48,47 +48,17 @@ import { useAuth } from '../context/AuthContext';
 import { productApi, categoryApi, orderApi } from '../services/api';
 import { logger } from '../services/logger';
 import type { Category, Product, Order } from '../types';
-import { BRAND, erpHomePathForRole } from '../constants/branding';
+import { BRAND, CONTACT, erpHomePathForRole } from '../constants/branding';
 import { orderService, generateOrderNumber } from '../services/firestore';
+import { fetchLandingPublicCopy } from '../services/landingSettings';
+import {
+  applyLandingErpPlaceholders,
+  getDefaultLandingPublicCopy,
+  type LandingPublicCopy,
+} from '../types/landingPublic';
 
 const LANDING_WISHLIST_KEY = 'saxar_landing_wishlist';
 const LANDING_WISHLIST_LEGACY = 'wishlist';
-
-// Banner data
-const banners = [
-  {
-    id: 1,
-    title: 'Saxar — sifatli go\'sht mahsulotlari',
-    subtitle: 'Tabiiy va ekologik toza go\'sht-kolbasa mahsulotlari',
-    bg: 'from-emerald-400 via-teal-400 to-emerald-300',
-    image: 'https://images.unsplash.com/photo-1607623814075-e51df1bdc82f?w=1200',
-    badge: 'SAXAR',
-  },
-  {
-    id: 2,
-    title: 'B2B hamkorlar uchun',
-    subtitle: 'Ulgurji narxlar va tezkor yetkazib berish',
-    bg: 'from-amber-300 via-yellow-300 to-amber-200',
-    image: 'https://images.unsplash.com/photo-1614961909012-73b4ece2c51a?w=1200',
-    badge: 'B2B',
-  },
-  {
-    id: 3,
-    title: 'Sifat kafolati',
-    subtitle: 'ISO 22000 va HACCP sertifikatlari bilan',
-    bg: 'from-blue-300 via-cyan-300 to-blue-200',
-    image: 'https://images.unsplash.com/photo-1607058332818-32e5e4a60ffe?w=1200',
-    badge: 'SIFAT',
-  },
-  {
-    id: 4,
-    title: 'Yangi so\'yilgan go\'sht',
-    subtitle: 'Har kuni yangi va yangi so\'yilgan go\'sht',
-    bg: 'from-violet-300 via-purple-300 to-violet-200',
-    image: 'https://images.unsplash.com/photo-1588347818036-558601350947?w=1200',
-    badge: 'YANGI',
-  },
-];
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -112,6 +82,7 @@ export default function LandingPage() {
   const [orderNotes, setOrderNotes] = useState('');
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [currentBanner, setCurrentBanner] = useState(0);
+  const [landing, setLanding] = useState<LandingPublicCopy>(() => getDefaultLandingPublicCopy());
   const [flashSaleTime, setFlashSaleTime] = useState({ hours: 0, minutes: 0, seconds: 0 });
   
   // Professional features state
@@ -202,6 +173,24 @@ export default function LandingPage() {
     loadData();
   }, []);
 
+  useEffect(() => {
+    let ok = true;
+    fetchLandingPublicCopy().then((d) => {
+      if (ok) setLanding(d);
+    });
+    return () => {
+      ok = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const onUpdated = () => {
+      fetchLandingPublicCopy().then(setLanding);
+    };
+    window.addEventListener('saxar:landing-updated', onUpdated);
+    return () => window.removeEventListener('saxar:landing-updated', onUpdated);
+  }, []);
+
   const categoriesSorted = useMemo(() => {
     return [...categories]
       .filter((c) => c.isActive)
@@ -227,13 +216,21 @@ export default function LandingPage() {
 
   const erpDashboardHref = useMemo(() => erpHomePathForRole(userData?.role), [userData?.role]);
 
+  useEffect(() => {
+    const n = landing.banners.length;
+    if (n === 0) return;
+    setCurrentBanner((c) => c % n);
+  }, [landing.banners]);
+
   // Banner auto-slide
   useEffect(() => {
+    const n = landing.banners.length;
+    if (n === 0) return;
     const interval = setInterval(() => {
-      setCurrentBanner((prev) => (prev + 1) % banners.length);
+      setCurrentBanner((prev) => (prev + 1) % n);
     }, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [landing.banners.length]);
 
   // Flash sale — kun oxirigacha qolgan vaqt
   useEffect(() => {
@@ -542,9 +539,9 @@ export default function LandingPage() {
     const isWishlisted = wishlist.includes(product.id);
 
     return (
-      <div className="group bg-white rounded-xl border border-slate-100 overflow-hidden hover:shadow-lg transition-all duration-200">
+      <div className="group bg-white rounded-2xl border border-zinc-200/80 overflow-hidden hover:shadow-md transition-shadow duration-200">
         {/* Image */}
-        <div className="relative aspect-square bg-slate-50 overflow-hidden">
+        <div className="relative aspect-[4/5] bg-zinc-100 overflow-hidden sm:aspect-square">
           {product.images?.[0] ? (
             <img
               src={product.images[0]}
@@ -568,15 +565,15 @@ export default function LandingPage() {
           <div className="absolute top-2 right-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
             <button 
               onClick={() => toggleWishlist(product.id)}
-              className={`w-7 h-7 rounded-full shadow-md flex items-center justify-center transition-colors ${
-                isWishlisted ? 'bg-emerald-500 text-white' : 'bg-white hover:bg-emerald-50 text-slate-400 hover:text-emerald-500'
+              className={`w-7 h-7 rounded-full border border-zinc-200/80 bg-white flex items-center justify-center transition-colors ${
+                isWishlisted ? 'bg-emerald-600 border-emerald-600 text-white' : 'hover:bg-zinc-50 text-zinc-400 hover:text-emerald-600'
               }`}
             >
               <Heart className={`h-3.5 w-3.5 ${isWishlisted ? 'fill-current' : ''}`} />
             </button>
             <button 
               onClick={() => setQuickViewProduct(product)}
-              className="w-7 h-7 bg-white rounded-full shadow-md flex items-center justify-center hover:bg-emerald-50 text-slate-400 hover:text-emerald-500 transition-colors"
+              className="w-7 h-7 bg-white rounded-full border border-zinc-200/80 flex items-center justify-center hover:bg-zinc-50 text-zinc-400 hover:text-emerald-600 transition-colors"
             >
               <Eye className="h-3.5 w-3.5" />
             </button>
@@ -584,19 +581,19 @@ export default function LandingPage() {
         </div>
 
         {/* Content */}
-        <div className="p-3">
-          <div className="text-[10px] text-emerald-600 font-medium mb-0.5">
+        <div className="p-3.5 sm:p-4">
+          <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-emerald-600/90">
             {categoriesSorted.find((c) => c.id === product.categoryId)?.name || product.categoryName || ''}
           </div>
-          <h3 className="font-medium text-slate-800 text-xs line-clamp-2 mb-1.5 min-h-[32px]">
+          <h3 className="line-clamp-2 min-h-[2.5rem] text-sm font-medium leading-snug text-zinc-900">
             {product.name}
           </h3>
 
           {/* Price */}
-          <div className="mb-2">
+          <div className="mb-3 mt-2">
             {showOrderControls ? (
               <div className="flex items-baseline gap-1.5">
-                <span className="text-sm font-bold text-slate-800">
+                <span className="text-base font-semibold text-zinc-900">
                   {formatPrice(product.b2bPrice)} so'm
                 </span>
                 {discount > 0 && (
@@ -650,119 +647,117 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col">
-      {/* Saxar — saxar.uz: ERP kirish va brend */}
-      <div className="sticky top-0 z-[100] shadow-md shadow-emerald-950/10">
-        <div className="bg-gradient-to-r from-slate-950 via-emerald-950 to-slate-900 text-white border-b border-emerald-800/40">
-          <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2.5 sm:py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="flex items-start sm:items-center gap-3 min-w-0">
+    <div className="min-h-screen bg-zinc-50 text-zinc-800 flex flex-col antialiased">
+      <div className="sticky top-0 z-50 bg-white/90 backdrop-blur-xl border-b border-zinc-200/90 shadow-[0_8px_30px_-14px_rgba(15,23,42,0.1)] relative">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+            <div className="flex items-center gap-3 min-w-0">
               <div
-                className="shrink-0 h-10 w-10 rounded-2xl bg-gradient-to-br from-amber-400 via-orange-400 to-rose-500 flex items-center justify-center text-slate-900 font-black text-lg shadow-lg ring-2 ring-white/20"
+                className="shrink-0 h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center text-white font-semibold text-sm shadow-sm ring-1 ring-emerald-600/20"
                 aria-hidden
               >
                 S
               </div>
               <div className="min-w-0">
-                <p className="text-[10px] sm:text-xs uppercase tracking-[0.22em] text-emerald-300/95 font-semibold">
-                  {BRAND.siteHost} · rasmiy sayt
+                <p className="text-[11px] font-medium text-zinc-500">{BRAND.siteHost}</p>
+                <p className="text-sm sm:text-base font-semibold text-zinc-900 tracking-tight truncate">
+                  {BRAND.name}
+                  <span className="text-zinc-500 font-normal"> — {BRAND.tagline}</span>
                 </p>
-                <p className="text-sm sm:text-base font-bold text-white leading-snug truncate">
-                  {BRAND.name}{' '}
-                  <span className="text-emerald-200/90 font-medium">— {BRAND.tagline}</span>
-                </p>
-                <p className="text-[11px] sm:text-xs text-slate-300 mt-0.5 hidden md:block max-w-xl">
+                <p className="mt-0.5 hidden lg:block text-xs text-zinc-500 leading-snug max-w-2xl line-clamp-2">
                   {BRAND.description}
                 </p>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
               <Link
                 to="/register"
-                className="inline-flex items-center justify-center rounded-xl border border-white/25 bg-white/10 px-3 py-2 text-xs sm:text-sm font-semibold text-white hover:bg-white/15 transition-colors"
+                className="inline-flex items-center justify-center rounded-full border border-zinc-200 bg-white px-4 py-2 text-xs sm:text-sm font-medium text-zinc-800 hover:bg-zinc-50 hover:border-zinc-300 transition-colors"
               >
                 B2B ro&apos;yxatdan o&apos;tish
               </Link>
               <Link
                 to="/login"
-                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 px-4 py-2 text-xs sm:text-sm font-bold text-slate-900 shadow-lg shadow-orange-500/25 hover:from-amber-300 hover:to-orange-400 transition-all"
+                className="inline-flex items-center gap-2 rounded-full bg-zinc-900 px-4 py-2 text-xs sm:text-sm font-medium text-white hover:bg-zinc-800 transition-colors shadow-sm"
               >
-                <LayoutDashboard className="h-4 w-4 shrink-0" />
+                <LayoutDashboard className="h-4 w-4 shrink-0 opacity-90" />
                 ERP ga kirish
               </Link>
             </div>
           </div>
+
+          <div className="flex flex-col gap-2 border-t border-zinc-100 py-2.5 text-[11px] sm:text-xs text-zinc-600 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-4">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+              <a
+                href={BRAND.siteUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="hidden sm:inline font-semibold text-emerald-700 hover:text-emerald-600"
+              >
+                {BRAND.siteHost}
+              </a>
+              {CONTACT.phones.map((p) => (
+                <a
+                  key={p.tel}
+                  href={`tel:${p.tel}`}
+                  className="inline-flex items-center gap-1 text-zinc-700 hover:text-emerald-700 font-medium"
+                >
+                  <Phone className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                  {p.display}
+                </a>
+              ))}
+              <span className="hidden md:inline-flex items-start gap-1.5 text-zinc-500 max-w-md" title={CONTACT.addressLine}>
+                <MapPin className="h-3.5 w-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                <span className="line-clamp-2 leading-snug">{CONTACT.addressLine}</span>
+              </span>
+              <span className="hidden lg:inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 font-medium text-emerald-800">
+                <Truck className="h-3.5 w-3.5 text-emerald-700" />
+                Bepul yetkazib berish
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <button type="button" className="inline-flex items-center gap-1 hover:text-zinc-900 transition-colors">
+                <Globe className="h-3.5 w-3.5" />
+                O&apos;Z
+              </button>
+              {user ? (
+                <Link to={erpDashboardHref} className="font-medium hover:text-zinc-900 transition-colors">
+                  ERP kabineti
+                </Link>
+              ) : (
+                <>
+                  <Link to="/login" className="hover:text-zinc-900 transition-colors">
+                    Kirish
+                  </Link>
+                  <Link
+                    to="/register"
+                    className="rounded-full bg-emerald-600 px-3 py-1 font-medium text-white hover:bg-emerald-700 transition-colors"
+                  >
+                    Ro&apos;yxatdan o&apos;tish
+                  </Link>
+                </>
+              )}
+            </div>
+          </div>
         </div>
-        <div className="h-0.5 bg-slate-800/80">
+
+        <div className="h-[3px] bg-zinc-100">
           <div
-            className="h-full bg-gradient-to-r from-amber-400 via-emerald-400 to-teal-400 transition-all duration-150"
+            className="h-full bg-emerald-500 transition-all duration-150"
             style={{ width: `${scrollProgress}%` }}
           />
         </div>
-      </div>
 
-      {/* Top Bar */}
-      <div className="bg-white text-slate-600 text-xs py-2 border-b border-slate-100">
-        <div className="max-w-7xl mx-auto px-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <a
-              href={BRAND.siteUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="hidden sm:inline font-semibold text-emerald-700 hover:text-emerald-600"
-            >
-              {BRAND.siteHost}
-            </a>
-            <div className="flex items-center gap-1.5">
-              <Phone className="h-3 w-3 text-emerald-500" />
-              <a href="tel:+998907863888" className="hover:text-emerald-500 transition-colors font-medium">+998907863888</a>
-            </div>
-            <div className="hidden md:flex items-center gap-1.5">
-              <MapPin className="h-3 w-3 text-emerald-500" />
-              <span>Toshkent</span>
-            </div>
-            <div className="hidden lg:flex items-center gap-1.5 bg-emerald-50 px-2.5 py-0.5 rounded-full">
-              <Truck className="h-3 w-3 text-emerald-500" />
-              <span className="text-emerald-600 font-medium text-xs">Bepul yetkazib berish</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* Language Selector */}
-            <button className="flex items-center gap-1 hover:text-emerald-500 transition-colors text-xs">
-              <Globe className="h-3 w-3" />
-              <span>O'Z</span>
-            </button>
-            {user ? (
-              <Link to={erpDashboardHref} className="hover:text-emerald-500 transition-colors text-xs font-medium">
-                ERP kabineti
-              </Link>
-            ) : (
-              <>
-                <Link to="/login" className="hover:text-emerald-500 transition-colors text-xs">
-                  Kirish
-                </Link>
-                <Link
-                  to="/register"
-                  className="bg-emerald-500 hover:bg-emerald-600 text-white px-2.5 py-1 rounded-md transition-colors text-xs font-medium"
-                >
-                  Ro&apos;yxatdan o&apos;tish
-                </Link>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Header */}
-      <header className="bg-white border-b border-slate-100 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 py-2">
+        <header className="border-t border-zinc-100/90 bg-white/70">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3">
           <div className="flex items-center justify-between gap-3">
             {/* Logo */}
             <Link to="/" className="flex items-center gap-2 shrink-0">
-              <div className="w-9 h-9 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl flex items-center justify-center">
+              <div className="w-9 h-9 bg-emerald-600 rounded-lg flex items-center justify-center shadow-sm">
                 <Package className="h-5 w-5 text-white" />
               </div>
               <div className="hidden sm:block">
-                <span className="text-lg font-bold text-slate-800">{BRAND.name}</span>
+                <span className="text-lg font-semibold text-zinc-900">{BRAND.name}</span>
                 <span className="block text-[10px] text-emerald-600 font-medium -mt-0.5">{BRAND.tagline}</span>
               </div>
             </Link>
@@ -770,11 +765,11 @@ export default function LandingPage() {
             {/* Categories Button */}
             <button 
               onClick={() => setShowMegaMenu(!showMegaMenu)}
-              className="hidden lg:flex items-center gap-1.5 px-3 py-2 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors text-sm"
+              className="hidden lg:inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-zinc-50 px-4 py-2 text-sm font-medium text-zinc-800 transition-colors hover:border-zinc-300 hover:bg-white"
             >
-              <Grid3X3 className="h-4 w-4 text-emerald-600" />
-              <span className="text-slate-700 font-medium">Kategoriyalar</span>
-              <ChevronDown className={`h-3.5 w-3.5 text-emerald-500 transition-transform ${showMegaMenu ? 'rotate-180' : ''}`} />
+              <Grid3X3 className="h-4 w-4 text-zinc-600" />
+              <span>Kategoriyalar</span>
+              <ChevronDown className={`h-3.5 w-3.5 text-zinc-500 transition-transform ${showMegaMenu ? 'rotate-180' : ''}`} />
             </button>
 
             {/* Search */}
@@ -782,17 +777,17 @@ export default function LandingPage() {
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="Qidirish..."
+                  placeholder="Mahsulot qidirish..."
                   value={catalogSearch}
                   onChange={(e) => setCatalogSearch(e.target.value)}
                   onFocus={() => setShowSearchDropdown(true)}
                   onBlur={() => setTimeout(() => setShowSearchDropdown(false), 200)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSearch(catalogSearch)}
-                  className="w-full py-2 pl-4 pr-10 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-300 focus:border-transparent text-sm text-slate-700 placeholder:text-slate-400"
+                  className="w-full rounded-full border border-zinc-200 bg-zinc-50 py-2.5 pl-4 pr-11 text-sm text-zinc-900 placeholder:text-zinc-400 transition-colors focus:border-emerald-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                 />
                 <button
                   onClick={() => handleSearch(catalogSearch)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 bg-emerald-500 hover:bg-emerald-600 rounded-md flex items-center justify-center transition-colors"
+                  className="absolute right-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-emerald-600 text-white transition-colors hover:bg-emerald-700"
                 >
                   <Search className="h-3.5 w-3.5 text-white" />
                 </button>
@@ -800,7 +795,7 @@ export default function LandingPage() {
 
               {/* Search Dropdown */}
               {showSearchDropdown && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-lg border border-slate-100 overflow-hidden z-50">
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-md border border-zinc-100 overflow-hidden z-50">
                   {searchHistory.length > 0 && (
                     <div className="p-2 border-b border-slate-50">
                       <div className="text-[10px] text-slate-400 mb-1.5">So'nggi qidiruvlar</div>
@@ -847,7 +842,7 @@ export default function LandingPage() {
                     )}
                   </button>
                   {showNotifications && (
-                    <div className="absolute top-full right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl shadow-emerald-100 border border-emerald-100 overflow-hidden z-50">
+                    <div className="absolute top-full right-0 mt-2 w-80 bg-white rounded-xl shadow-md border border-zinc-100 overflow-hidden z-50">
                       <div className="p-3 border-b border-emerald-50 flex items-center justify-between">
                         <span className="font-semibold text-slate-800">Bildirishnomalar</span>
                         <button className="text-sm text-emerald-600 hover:text-emerald-700">Barchasini o'qish</button>
@@ -891,7 +886,7 @@ export default function LandingPage() {
               {/* Cart */}
               <button
                 onClick={() => setCartOpen(true)}
-                className="relative flex items-center gap-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white px-3 py-1.5 rounded-lg transition-all text-sm"
+                className="relative flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg transition-colors text-sm shadow-sm"
               >
                 <ShoppingCart className="h-4 w-4" />
                 <span className="hidden sm:inline font-medium text-sm">Savat</span>
@@ -914,7 +909,7 @@ export default function LandingPage() {
                     </span>
                   </button>
                   {showUserMenu && (
-                    <div className="absolute top-full right-0 mt-1 w-48 bg-white rounded-xl shadow-lg border border-slate-100 overflow-hidden z-50">
+                    <div className="absolute top-full right-0 mt-1 w-48 bg-white rounded-lg shadow-md border border-zinc-100 overflow-hidden z-50">
                       <div className="p-2.5 border-b border-slate-50">
                         <p className="font-semibold text-slate-800 text-sm">{userData?.name || 'Foydalanuvchi'}</p>
                         <p className="text-xs text-slate-400">{userData?.email}</p>
@@ -972,7 +967,7 @@ export default function LandingPage() {
 
         {/* Mega Menu */}
         {showMegaMenu && (
-          <div className="absolute top-full left-0 right-0 bg-white border-b border-slate-100 shadow-lg z-40">
+          <div className="absolute top-full left-0 right-0 z-40 rounded-b-2xl border-x border-b border-zinc-100 bg-white shadow-lg">
             <div className="max-w-7xl mx-auto px-4 py-4">
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
                 {categoriesSorted.map((cat) => (
@@ -982,7 +977,7 @@ export default function LandingPage() {
                     onClick={() => { setSelectedCategory(cat.id); setShowMegaMenu(false); }}
                     className="flex flex-col items-center gap-1.5 p-3 rounded-xl hover:bg-emerald-50 transition-colors group"
                   >
-                    <div className="w-10 h-10 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl flex items-center justify-center group-hover:from-emerald-100 group-hover:to-teal-100 transition-colors">
+                    <div className="w-10 h-10 bg-emerald-50 rounded-lg flex items-center justify-center group-hover:bg-emerald-100 transition-colors">
                       <Package className="h-5 w-5 text-emerald-500" />
                     </div>
                     <span className="text-xs font-medium text-slate-700 text-center">{cat.name}</span>
@@ -993,99 +988,104 @@ export default function LandingPage() {
           </div>
         )}
       </header>
+      </div>
 
       {/* Saxar kompaniyasi — vizual ma'lumot bloklari */}
-      <section className="relative overflow-hidden bg-gradient-to-b from-emerald-50/90 via-white to-slate-50 border-b border-emerald-100/80">
+      <section className="relative overflow-hidden border-b border-zinc-100 bg-gradient-to-b from-white via-zinc-50/40 to-white">
         <div className="pointer-events-none absolute inset-0">
-          <div className="absolute -left-20 top-10 h-72 w-72 rounded-full bg-emerald-400/20 blur-3xl" />
-          <div className="absolute right-0 bottom-0 h-80 w-80 rounded-full bg-amber-300/25 blur-3xl" />
+          <div className="absolute -right-24 top-0 h-72 w-72 rounded-full bg-emerald-400/[0.07] blur-3xl" />
         </div>
-        <div className="relative max-w-7xl mx-auto px-4 py-10 sm:py-14">
-          <div className="text-center max-w-3xl mx-auto mb-10">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200/80 bg-white/80 px-3 py-1 text-xs font-semibold text-emerald-800 shadow-sm">
-              <Sparkles className="h-3.5 w-3.5" />
-              {BRAND.name} kompaniyasi
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-14 sm:py-20">
+          <div className="text-center max-w-3xl mx-auto mb-12 sm:mb-14">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200/90 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 shadow-sm">
+              <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
+              {landing.hero.eyebrow}
             </span>
-            <h1 className="mt-4 text-3xl sm:text-4xl lg:text-5xl font-extrabold text-slate-900 tracking-tight leading-tight">
-              Tabiiylik, sifat va{' '}
-              <span className="bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">ishonch</span>
+            <h1 className="mt-5 text-3xl sm:text-4xl lg:text-5xl font-semibold text-zinc-900 tracking-tight leading-[1.15]">
+              {landing.hero.headline}
+              <span className="text-emerald-600">{landing.hero.headlineAccent}</span>
             </h1>
-            <p className="mt-4 text-slate-600 text-sm sm:text-base leading-relaxed">
-              {BRAND.description} B2B hamkorlar uchun ulgurji narxlar, sovuqda saqlab yetkazish va yagona{' '}
-              <span className="font-semibold text-emerald-700">{BRAND.erpProductName}</span> orqali buyurtmadan
-              hisobotgacha jarayonlarni bir joyda boshqaring.
+            <p className="mt-5 text-zinc-600 text-base sm:text-lg leading-relaxed max-w-2xl mx-auto">
+              {applyLandingErpPlaceholders(landing.hero.lead)}
             </p>
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
               <button
                 type="button"
                 onClick={scrollToCatalog}
-                className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-600/25 hover:bg-emerald-700 transition-colors"
+                className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-6 py-3 text-sm font-medium text-white shadow-sm hover:bg-emerald-700 transition-colors"
               >
-                Katalogni ko&apos;rish
+                {landing.hero.ctaCatalog}
                 <ChevronRight className="h-4 w-4" />
               </button>
               <Link
                 to="/login"
-                className="inline-flex items-center gap-2 rounded-2xl border-2 border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-800 hover:border-emerald-300 hover:text-emerald-800 transition-colors"
+                className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-6 py-3 text-sm font-medium text-zinc-800 shadow-sm hover:border-zinc-300 hover:bg-zinc-50 transition-colors"
               >
                 <LayoutDashboard className="h-4 w-4 text-emerald-600" />
-                {BRAND.erpProductName} ga o&apos;tish
+                {applyLandingErpPlaceholders(landing.hero.ctaErp)}
               </Link>
             </div>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-3xl border border-white/60 bg-white/80 p-5 shadow-lg shadow-emerald-900/5 backdrop-blur-md">
-              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
-                <Factory className="h-5 w-5" />
-              </div>
-              <h3 className="text-base font-bold text-slate-900">Zamonaviy ishlab chiqarish</h3>
-              <p className="mt-2 text-sm text-slate-600 leading-relaxed">
-                HACCP va ISO 22000 talablari asosida partiyalar bo&apos;yicha nazorat, xavfsizlik va izchil sifat.
-              </p>
-            </div>
-            <div className="rounded-3xl border border-white/60 bg-white/80 p-5 shadow-lg shadow-emerald-900/5 backdrop-blur-md">
-              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-teal-100 text-teal-700">
-                <Truck className="h-5 w-5" />
-              </div>
-              <h3 className="text-base font-bold text-slate-900">Sovuqda saqlash va yetkazish</h3>
-              <p className="mt-2 text-sm text-slate-600 leading-relaxed">
-                -18°C gacha saqlash va xavfsiz transport: mahsulot sizga yetguncha harorat tartibi buzilmaydi.
-              </p>
-            </div>
-            <div className="rounded-3xl border border-white/60 bg-white/80 p-5 shadow-lg shadow-emerald-900/5 backdrop-blur-md">
-              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-100 text-amber-800">
-                <Building2 className="h-5 w-5" />
-              </div>
-              <h3 className="text-base font-bold text-slate-900">B2B hamkorlik</h3>
-              <p className="mt-2 text-sm text-slate-600 leading-relaxed">
-                STIR va shartnoma asosida ulgurji narxlar, qarz limiti va akkaunt bo&apos;yicha shaffof hisob-kitob.
-              </p>
-            </div>
-            <div className="rounded-3xl border border-amber-200/80 bg-gradient-to-br from-slate-900 via-emerald-950 to-slate-900 p-5 text-white shadow-xl">
-              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15">
-                <Award className="h-5 w-5 text-amber-300" />
-              </div>
-              <h3 className="text-base font-bold">{BRAND.erpProductName}</h3>
-              <p className="mt-2 text-sm text-slate-300 leading-relaxed">
-                Admin, ombor, buxgalter, agent, haydovchi — rollar bo&apos;yicha kirish. Ro&apos;yxatdan o&apos;tish va kirish.
-              </p>
-              <Link
-                to="/login"
-                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-400 to-orange-500 py-2.5 text-sm font-bold text-slate-900 hover:from-amber-300 hover:to-orange-400"
-              >
-                Kirish / ro&apos;yxatdan o&apos;tish
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </div>
+            {landing.featureCards.slice(0, 4).map((card, idx) => {
+              const icons = [Factory, Truck, Building2, Award] as const;
+              const Icon = icons[idx] ?? Factory;
+              const isErp = idx === 3;
+              if (isErp) {
+                return (
+                  <div
+                    key={`fc-${idx}`}
+                    className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5 text-white shadow-sm"
+                  >
+                    <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-white/10">
+                      <Icon className="h-5 w-5 text-amber-300" />
+                    </div>
+                    <h3 className="text-base font-semibold">{applyLandingErpPlaceholders(card.title)}</h3>
+                    <p className="mt-2 text-sm text-zinc-400 leading-relaxed">{applyLandingErpPlaceholders(card.body)}</p>
+                    <Link
+                      to="/login"
+                      className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-white py-2.5 text-sm font-medium text-zinc-900 hover:bg-zinc-100 transition-colors"
+                    >
+                      {applyLandingErpPlaceholders(landing.erpCardCta)}
+                      <ArrowRight className="h-4 w-4" />
+                    </Link>
+                  </div>
+                );
+              }
+              const ringClass =
+                idx === 0
+                  ? 'hover:border-zinc-300 hover:shadow-md'
+                  : 'shadow-sm';
+              const iconWrap =
+                idx === 0
+                  ? 'bg-emerald-50 text-emerald-700'
+                  : idx === 1
+                    ? 'bg-teal-50 text-teal-700'
+                    : 'bg-amber-50 text-amber-800';
+              return (
+                <div
+                  key={`fc-${idx}`}
+                  className={`rounded-2xl border border-zinc-200/80 bg-white p-6 transition-colors ${ringClass}`}
+                >
+                  <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-lg ${iconWrap}`}>
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <h3 className="text-base font-semibold text-zinc-900">{applyLandingErpPlaceholders(card.title)}</h3>
+                  <p className="mt-2 text-sm text-zinc-600 leading-relaxed">{applyLandingErpPlaceholders(card.body)}</p>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>
 
       {/* Hero Banner Slider */}
-      <section className="relative bg-white overflow-hidden">
-        <div className="relative h-[280px] sm:h-[360px] lg:h-[420px]">
-          {banners.map((banner, index) => (
+      <section className="relative bg-zinc-50 pb-6 sm:pb-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4">
+          <div className="relative overflow-hidden rounded-2xl ring-1 ring-zinc-200/80 shadow-md sm:rounded-3xl">
+            <div className="relative h-[260px] sm:h-[340px] lg:h-[400px]">
+          {landing.banners.map((banner, index) => (
             <div
               key={banner.id}
               className={`absolute inset-0 transition-all duration-700 ${
@@ -1093,11 +1093,11 @@ export default function LandingPage() {
               }`}
             >
               <div className={`absolute inset-0 bg-gradient-to-r ${banner.bg}`} />
-              <div className="absolute inset-0 bg-black/30" />
+              <div className="absolute inset-0 bg-slate-900/20" />
               <img
                 src={banner.image}
                 alt={banner.title}
-                className="w-full h-full object-cover opacity-30"
+                className="w-full h-full object-cover opacity-40"
               />
               <div className="absolute inset-0 flex items-center">
                 <div className="max-w-7xl mx-auto px-4 w-full">
@@ -1137,13 +1137,13 @@ export default function LandingPage() {
           <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/20">
             <div 
               className="h-full bg-white transition-all duration-100"
-              style={{ width: `${((currentBanner + 1) / banners.length) * 100}%` }}
+              style={{ width: `${((currentBanner + 1) / landing.banners.length) * 100}%` }}
             />
           </div>
 
           {/* Banner Navigation */}
           <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-3">
-            {banners.map((_, index) => (
+            {landing.banners.map((_, index) => (
               <button
                 key={index}
                 onClick={() => setCurrentBanner(index)}
@@ -1156,13 +1156,13 @@ export default function LandingPage() {
 
           {/* Arrow Navigation */}
           <button
-            onClick={() => setCurrentBanner((prev) => (prev - 1 + banners.length) % banners.length)}
+            onClick={() => setCurrentBanner((prev) => (prev - 1 + landing.banners.length) % landing.banners.length)}
             className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-white hover:bg-white/30 transition-all"
           >
             <ArrowLeft className="h-4 w-4" />
           </button>
           <button
-            onClick={() => setCurrentBanner((prev) => (prev + 1) % banners.length)}
+            onClick={() => setCurrentBanner((prev) => (prev + 1) % landing.banners.length)}
             className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-white hover:bg-white/30 transition-all"
           >
             <ArrowRight className="h-4 w-4" />
@@ -1170,75 +1170,67 @@ export default function LandingPage() {
 
           {/* Floating Cards */}
           <div className="hidden lg:block absolute bottom-12 right-12">
-            <div className="bg-white/95 backdrop-blur rounded-xl p-3 shadow-lg max-w-[200px]">
+            <div className="bg-white/95 rounded-lg p-3 shadow-md border border-white/50 max-w-[200px]">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center">
                   <Users className="h-4 w-4 text-emerald-600" />
                 </div>
                 <div>
-                  <p className="font-semibold text-slate-800 text-sm">500+ Do'konlar</p>
-                  <p className="text-[10px] text-slate-500">Bizning hamkorlarimiz</p>
+                  <p className="font-semibold text-slate-800 text-sm">{landing.statCard.title}</p>
+                  <p className="text-[10px] text-slate-500">{landing.statCard.subtitle}</p>
                 </div>
               </div>
+            </div>
+          </div>
             </div>
           </div>
         </div>
       </section>
 
       {/* Quick Features Bar */}
-      <section className="bg-white border-b border-slate-100 py-3">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="flex items-center gap-2 p-2 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer">
-              <div className="w-9 h-9 bg-emerald-50 rounded-lg flex items-center justify-center">
-                <Truck className="h-4 w-4 text-emerald-600" />
-              </div>
-              <div>
-                <h3 className="font-medium text-slate-800 text-sm">Tezkor yetkazish</h3>
-                <p className="text-xs text-slate-500">24 soat ichida</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 p-2 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer">
-              <div className="w-9 h-9 bg-emerald-50 rounded-lg flex items-center justify-center">
-                <Shield className="h-4 w-4 text-emerald-500" />
-              </div>
-              <div>
-                <h3 className="font-medium text-slate-800 text-sm">Sifat kafolati</h3>
-                <p className="text-xs text-slate-500">100% tabiiy</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 p-2 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer">
-              <div className="w-9 h-9 bg-blue-50 rounded-lg flex items-center justify-center">
-                <RefreshCw className="h-4 w-4 text-blue-500" />
-              </div>
-              <div>
-                <h3 className="font-medium text-slate-800 text-sm">Sovuq saqlash</h3>
-                <p className="text-xs text-slate-500">-18°C gacha</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 p-2 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer">
-              <div className="w-9 h-9 bg-amber-50 rounded-lg flex items-center justify-center">
-                <HeadphonesIcon className="h-4 w-4 text-amber-500" />
-              </div>
-              <div>
-                <h3 className="font-medium text-slate-800 text-sm">24/7 Qo'llab-quvvatlash</h3>
-                <p className="text-xs text-slate-500">Har doim yordam</p>
-              </div>
-            </div>
+      <section className="border-b border-zinc-100 bg-white py-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+            {landing.quickPoints.slice(0, 4).map((qp, i) => {
+              const icons = [Truck, Shield, RefreshCw, HeadphonesIcon] as const;
+              const Icon = icons[i] ?? Truck;
+              const wrap =
+                i === 0 || i === 1
+                  ? 'bg-emerald-50'
+                  : i === 2
+                    ? 'bg-blue-50'
+                    : 'bg-amber-50';
+              const iconColor =
+                i === 0 || i === 1 ? 'text-emerald-600' : i === 2 ? 'text-blue-500' : 'text-amber-500';
+              return (
+                <div
+                  key={`qp-${i}`}
+                  className="flex cursor-pointer items-center gap-3 rounded-2xl border border-transparent p-3 transition-colors hover:border-zinc-200 hover:bg-zinc-50"
+                >
+                  <div className={`w-9 h-9 ${wrap} rounded-lg flex items-center justify-center`}>
+                    <Icon className={`h-4 w-4 ${iconColor}`} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-medium text-zinc-900">{qp.title}</h3>
+                    <p className="text-xs text-zinc-500">{qp.subtitle}</p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>
 
       {/* Categories Horizontal */}
-      <section className="py-4 bg-slate-50 border-b border-slate-100">
+      <section className="py-4 bg-zinc-50 border-b border-zinc-100">
         <div className="max-w-7xl mx-auto px-4">
-          <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+          <div className="flex items-center gap-2 overflow-x-auto pb-2 scroll-smooth">
             <button
               onClick={() => setSelectedCategory('all')}
               className={`shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-lg font-medium text-sm transition-all ${
                 selectedCategory === 'all'
-                  ? 'bg-emerald-500 text-white shadow-md'
-                  : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'bg-white text-zinc-700 hover:bg-zinc-50 border border-zinc-200'
               }`}
             >
               <Grid3X3 className="h-5 w-5" />
@@ -1248,10 +1240,10 @@ export default function LandingPage() {
               <button
                 key={cat.id}
                 onClick={() => setSelectedCategory(cat.id)}
-                className={`shrink-0 flex items-center gap-2 px-5 py-3 rounded-xl font-medium transition-all ${
+                className={`shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
                   selectedCategory === cat.id
-                    ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg'
-                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'bg-white text-zinc-700 hover:bg-zinc-50 border border-zinc-200'
                 }`}
               >
                 <Package className="h-5 w-5" />
@@ -1264,68 +1256,67 @@ export default function LandingPage() {
 
       {/* Flash Sale */}
       {discountProducts.length > 0 && (
-        <section className="py-8 bg-gradient-to-r from-red-600 via-orange-500 to-yellow-500 relative overflow-hidden">
-          {/* Animated Background */}
-          <div className="absolute inset-0 opacity-20">
-            <div className="absolute top-0 left-0 w-40 h-40 bg-white rounded-full blur-3xl animate-pulse" />
-            <div className="absolute bottom-0 right-0 w-60 h-60 bg-white rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
-          </div>
-
-          <div className="max-w-7xl mx-auto px-4 relative">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-4">
+        <section className="py-8 bg-zinc-50 border-y border-zinc-100">
+          <div className="max-w-7xl mx-auto px-4">
+            <div className="rounded-2xl border border-orange-200/70 bg-gradient-to-br from-orange-50 via-white to-amber-50 p-6 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center">
-                    <Flame className="h-7 w-7 text-white animate-pulse" />
+                  <div className="w-11 h-11 bg-orange-100 rounded-xl flex items-center justify-center">
+                    <Flame className="h-6 w-6 text-orange-600" />
                   </div>
                   <div>
-                    <h2 className="text-2xl font-bold text-white">Flash Chegirmalar</h2>
-                    <p className="text-white/80 text-sm">Chegirmalar tugashiga qoldi</p>
+                    <h2 className="text-xl font-semibold text-zinc-900">Flash chegirmalar</h2>
+                    <p className="text-zinc-600 text-sm">Chegirma tugashiga qoldi</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 bg-white/20 backdrop-blur rounded-xl px-4 py-2">
-                  <Timer className="h-5 w-5 text-white" />
-                  <div className="flex items-center gap-1 font-mono font-bold text-xl text-white">
-                    <span className="bg-white/20 px-2 py-1 rounded">{String(flashSaleTime.hours).padStart(2, '0')}</span>
-                    <span className="animate-pulse">:</span>
-                    <span className="bg-white/20 px-2 py-1 rounded">{String(flashSaleTime.minutes).padStart(2, '0')}</span>
-                    <span className="animate-pulse">:</span>
-                    <span className="bg-white/20 px-2 py-1 rounded">{String(flashSaleTime.seconds).padStart(2, '0')}</span>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-2 rounded-lg border border-orange-200/80 bg-white/80 px-3 py-2">
+                    <Timer className="h-4 w-4 text-orange-600" />
+                    <div className="flex items-center gap-1 font-mono font-semibold text-lg text-zinc-800">
+                      <span className="bg-zinc-100 px-2 py-0.5 rounded">{String(flashSaleTime.hours).padStart(2, '0')}</span>
+                      <span>:</span>
+                      <span className="bg-zinc-100 px-2 py-0.5 rounded">{String(flashSaleTime.minutes).padStart(2, '0')}</span>
+                      <span>:</span>
+                      <span className="bg-zinc-100 px-2 py-0.5 rounded">{String(flashSaleTime.seconds).padStart(2, '0')}</span>
+                    </div>
                   </div>
+                  <button
+                    type="button"
+                    className="text-sm font-medium text-orange-700 hover:text-orange-800 flex items-center gap-1"
+                  >
+                    Barchasini ko&apos;rish <ChevronRight className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
-              <button className="text-white font-medium flex items-center gap-1 hover:underline bg-white/20 px-4 py-2 rounded-xl hover:bg-white/30 transition-colors">
-                Barchasini ko'rish <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-              {discountProducts.slice(0, 5).map((product) => (
-                <ProductCard key={product.id} product={product} />
-              ))}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                {discountProducts.slice(0, 5).map((product) => (
+                  <ProductCard key={product.id} product={product} />
+                ))}
+              </div>
             </div>
           </div>
         </section>
       )}
 
       {/* Coupon Banner */}
-      <section className="py-4 bg-gradient-to-r from-emerald-500 to-teal-500">
+      <section className="py-4 bg-emerald-600">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
-              <Gift className="h-8 w-8 text-white" />
+              <Gift className="h-7 w-7 text-white/90" />
               <div>
-                <h3 className="text-base font-bold text-white">Birinchi buyurtmangizga 15% chegirma!</h3>
+                <h3 className="text-sm sm:text-base font-semibold text-white">Birinchi buyurtmangizga 15% chegirma</h3>
                 <p className="text-white/80 text-xs">NEWUSER kupon kodidan foydalaning</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <div className="bg-white/20 backdrop-blur px-3 py-1.5 rounded-lg border border-dashed border-white/50">
-                <span className="text-white font-mono font-bold text-sm">NEWUSER</span>
+              <div className="bg-white/15 px-3 py-1.5 rounded-md border border-dashed border-white/40">
+                <span className="text-white font-mono font-semibold text-sm">NEWUSER</span>
               </div>
               <button 
                 onClick={() => copyCoupon('NEWUSER')}
-                className="bg-white text-emerald-600 font-medium px-4 py-1.5 rounded-lg hover:bg-slate-50 transition-colors text-sm"
+                className="bg-white text-emerald-700 font-medium px-3 py-1.5 rounded-md hover:bg-zinc-100 transition-colors text-sm shadow-sm"
               >
                 Nusxalash
               </button>
@@ -1335,24 +1326,24 @@ export default function LandingPage() {
       </section>
 
       {/* Top Products */}
-      <section className="py-8 bg-white">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="flex items-center justify-between mb-4">
+      <section className="border-b border-zinc-100 bg-white py-10 sm:py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="mb-6 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-amber-400 to-orange-400 rounded-xl flex items-center justify-center">
-                <TrendingUp className="h-5 w-5 text-white" />
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-100">
+                <TrendingUp className="h-5 w-5 text-emerald-700" />
               </div>
               <div>
-                <h2 className="text-lg font-bold text-slate-800">Mashhur mahsulotlar</h2>
-                <p className="text-slate-500 text-xs">Eng ko'p sotilgan mahsulotlar</p>
+                <h2 className="text-xl font-semibold tracking-tight text-zinc-900 sm:text-2xl">Mashhur mahsulotlar</h2>
+                <p className="text-sm text-zinc-500">Eng ko&apos;p sotilgan mahsulotlar</p>
               </div>
             </div>
-            <button className="text-emerald-600 font-medium flex items-center gap-1 hover:text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg hover:bg-emerald-100 transition-colors text-sm">
+            <button className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:border-zinc-300 hover:bg-zinc-50">
               Barchasi <ChevronRight className="h-4 w-4" />
             </button>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 md:gap-4">
             {topProducts.slice(0, 4).map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}
@@ -1361,24 +1352,24 @@ export default function LandingPage() {
       </section>
 
       {/* Brands Section */}
-      <section className="py-8 bg-slate-50">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="text-center mb-6">
-            <h2 className="text-lg font-bold text-slate-800 mb-1">Kategoriyalar</h2>
-            <p className="text-slate-500 text-xs">Katalog bo‘yicha</p>
+      <section className="border-b border-zinc-100 bg-zinc-50/50 py-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="mb-8 text-center">
+            <h2 className="text-xl font-semibold tracking-tight text-zinc-900 sm:text-2xl">Kategoriyalar</h2>
+            <p className="mt-1 text-sm text-zinc-500">Katalog bo‘yicha</p>
           </div>
-          <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+          <div className="grid grid-cols-3 gap-3 md:grid-cols-6 md:gap-4">
             {categoryTiles.length === 0 && (
-              <p className="col-span-full text-center text-sm text-slate-500 py-6">Kategoriyalar yuklanmoqda...</p>
+              <p className="col-span-full py-8 text-center text-sm text-zinc-500">Kategoriyalar yuklanmoqda...</p>
             )}
             {categoryTiles.map((brand) => (
               <button
                 key={brand.id}
-                className="p-4 rounded-xl border border-slate-200 bg-white hover:border-emerald-200 transition-all hover:shadow-md"
+                className="rounded-2xl border border-zinc-200 bg-white p-4 text-left transition-all hover:border-emerald-200/80 hover:shadow-md"
               >
-                <div className="text-2xl mb-1">{brand.logo}</div>
-                <div className="font-medium text-slate-800 text-sm">{brand.name}</div>
-                <div className="text-xs text-slate-400">{brand.count} ta</div>
+                <div className="mb-1 text-2xl">{brand.logo}</div>
+                <div className="text-sm font-medium text-zinc-900">{brand.name}</div>
+                <div className="text-xs text-zinc-500">{brand.count} ta</div>
               </button>
             ))}
           </div>
@@ -1386,25 +1377,25 @@ export default function LandingPage() {
       </section>
 
       {/* Full Catalog */}
-      <section id="catalog" ref={catalogRef} className="py-8 scroll-mt-20 bg-slate-50">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="flex items-center justify-between mb-4">
+      <section id="catalog" ref={catalogRef} className="scroll-mt-28 border-t border-zinc-100 bg-zinc-50/80 py-10 sm:py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h2 className="text-lg font-bold text-slate-800">Barcha mahsulotlar</h2>
-              <p className="text-slate-500 text-xs">{filteredProducts.length} ta mahsulot</p>
+              <h2 className="text-xl font-semibold tracking-tight text-zinc-900 sm:text-2xl">Barcha mahsulotlar</h2>
+              <p className="mt-1 text-sm text-zinc-500">{filteredProducts.length} ta mahsulot</p>
             </div>
             <div className="flex items-center gap-2">
               {/* View Mode */}
-              <div className="hidden md:flex items-center gap-0.5 bg-white rounded-lg p-0.5 border border-slate-200">
+              <div className="hidden md:flex items-center gap-0.5 rounded-full border border-zinc-200 bg-white p-0.5">
                 <button
                   onClick={() => setViewMode('grid')}
-                  className={`p-1.5 rounded-md transition-colors ${viewMode === 'grid' ? 'bg-emerald-500 text-white' : 'text-slate-400 hover:text-slate-600'}`}
+                  className={`rounded-full p-2 transition-colors ${viewMode === 'grid' ? 'bg-zinc-900 text-white' : 'text-zinc-400 hover:text-zinc-700'}`}
                 >
                   <Grid3X3 className="h-4 w-4" />
                 </button>
                 <button
                   onClick={() => setViewMode('list')}
-                  className={`p-1.5 rounded-md transition-colors ${viewMode === 'list' ? 'bg-emerald-500 text-white' : 'text-slate-400 hover:text-slate-600'}`}
+                  className={`rounded-full p-2 transition-colors ${viewMode === 'list' ? 'bg-zinc-900 text-white' : 'text-zinc-400 hover:text-zinc-700'}`}
                 >
                   <List className="h-4 w-4" />
                 </button>
@@ -1414,7 +1405,7 @@ export default function LandingPage() {
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
-                className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className="rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
               >
                 <option value="popular">Mashhurlik bo'yicha</option>
                 <option value="newest">Eng yangi</option>
@@ -1601,7 +1592,7 @@ export default function LandingPage() {
             onClick={() => setCartOpen(false)}
           />
 
-          <div className="absolute right-0 top-0 h-full w-full max-w-sm bg-white shadow-xl overflow-y-auto">
+          <div className="absolute right-0 top-0 h-full w-full max-w-sm bg-white border-l border-zinc-200 shadow-lg overflow-y-auto">
             {/* Header */}
             <div className="sticky top-0 bg-white border-b border-slate-100 p-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -1744,7 +1735,7 @@ export default function LandingPage() {
       {wishlistOpen && (
         <div className="fixed inset-0 z-[72]">
           <div className="absolute inset-0 bg-black/50" onClick={() => setWishlistOpen(false)} />
-          <div className="absolute right-0 top-0 h-full w-full max-w-sm bg-white shadow-xl overflow-y-auto">
+          <div className="absolute right-0 top-0 h-full w-full max-w-sm bg-white border-l border-zinc-200 shadow-lg overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-slate-100 p-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Heart className="h-5 w-5 text-rose-500" />
@@ -1804,108 +1795,120 @@ export default function LandingPage() {
       )}
 
       {/* Footer */}
-      <footer className="bg-white border-t border-slate-100 py-6 mt-auto shrink-0">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+      <footer className="mt-auto shrink-0 border-t border-zinc-800 bg-zinc-950 text-zinc-400 py-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             {/* Logo */}
             <div className="col-span-2 md:col-span-1">
               <div className="flex items-center gap-2 mb-3">
-                <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-lg flex items-center justify-center">
+                <div className="w-9 h-9 rounded-lg bg-emerald-600 flex items-center justify-center ring-1 ring-emerald-500/30">
                   <Package className="h-4 w-4 text-white" />
                 </div>
-                <span className="text-lg font-bold text-slate-800">{BRAND.name}</span>
+                <span className="text-lg font-semibold text-white">{BRAND.name}</span>
               </div>
-              <p className="text-slate-500 text-xs leading-relaxed">
+              <p className="text-xs leading-relaxed text-zinc-500">
                 {BRAND.tagline}. {BRAND.siteHost} — rasmiy vitrina va B2B; {BRAND.erpProductName} — ichki boshqaruv.
               </p>
             </div>
 
-            {/* Links */}
+            {/* Kategoriyalar */}
             <div>
-              <h4 className="font-semibold text-slate-800 mb-3 text-sm">Mahsulotlar</h4>
-              <ul className="space-y-1.5 text-slate-500 text-xs">
-                <li><a href="#catalog" className="hover:text-emerald-500 transition-colors">Kolbasa</a></li>
-                <li><a href="#catalog" className="hover:text-emerald-500 transition-colors">Sosiska</a></li>
-                <li><a href="#catalog" className="hover:text-emerald-500 transition-colors">Mol go&apos;shti</a></li>
-                <li><a href="#catalog" className="hover:text-emerald-500 transition-colors">Qo&apos;y go&apos;shti</a></li>
+              <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">Kategoriyalar</h4>
+              <ul className="space-y-2 text-sm text-zinc-400">
+                {CONTACT.showcaseCategories.map((label) => (
+                  <li key={label}>
+                    <a href="#catalog" className="transition-colors hover:text-white">
+                      {label}
+                    </a>
+                  </li>
+                ))}
               </ul>
             </div>
 
-            {/* Contact */}
+            {/* Bog'lanish */}
             <div>
-              <h4 className="font-semibold text-slate-800 mb-3 text-sm">Bog'lanish</h4>
-              <ul className="space-y-1.5 text-slate-500 text-xs">
-                <li className="flex items-center gap-1.5">
-                  <Phone className="h-3 w-3 text-emerald-500" />
-                  <a href="tel:+998907863888" className="hover:text-emerald-500 transition-colors">+998907863888</a>
-                </li>
-                <li className="flex items-center gap-1.5">
-                  <MapPin className="h-3 w-3 text-emerald-500" />
-                  <span>Toshkent</span>
+              <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">Bog&apos;lanish</h4>
+              <ul className="space-y-2.5 text-sm text-zinc-400">
+                {CONTACT.phones.map((p) => (
+                  <li key={p.tel} className="flex items-start gap-2">
+                    <Phone className="h-4 w-4 shrink-0 text-emerald-500" aria-hidden />
+                    <a href={`tel:${p.tel}`} className="transition-colors hover:text-white">
+                      {p.display}
+                    </a>
+                  </li>
+                ))}
+                <li className="flex items-start gap-2">
+                  <MapPin className="h-4 w-4 shrink-0 text-emerald-500" aria-hidden />
+                  <span className="leading-snug text-zinc-400">{CONTACT.addressLine}</span>
                 </li>
               </ul>
             </div>
 
             {/* Working Hours */}
             <div>
-              <h4 className="font-semibold text-slate-800 mb-3 text-sm">Ish vaqti</h4>
-              <ul className="space-y-1.5 text-slate-500 text-xs">
-                <li>Dushanba - Juma: 08:00 - 18:00</li>
-                <li>Shanba: 08:00 - 14:00</li>
-                <li>Yakshanba: Dam olish kuni</li>
+              <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">Ish vaqti</h4>
+              <ul className="space-y-2 text-sm text-zinc-400">
+                <li>Dushanba – Juma: 08:00 – 18:00</li>
+                <li>Shanba: 08:00 – 14:00</li>
+                <li>Yakshanba: dam olish</li>
               </ul>
             </div>
           </div>
 
-          <div className="mt-6 pt-4 border-t border-slate-200 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[10px] sm:text-[11px] text-slate-500 leading-snug pb-[env(safe-area-inset-bottom,0px)]">
-            <span className="text-slate-500 whitespace-nowrap">© 2026</span>
-            <span className="hidden sm:inline text-slate-400">·</span>
-            <span className="whitespace-nowrap">
+          <div className="mt-10 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 border-t border-zinc-800/80 pt-6 text-[11px] text-zinc-500 pb-[env(safe-area-inset-bottom,0px)]">
+            <span className="whitespace-nowrap text-zinc-500">© 2026</span>
+            <span className="hidden sm:inline text-zinc-600">·</span>
+            <span className="whitespace-nowrap text-zinc-400">
               Ishlab chiqaruvchi:{' '}
               <a
                 href="https://cdcgroup.uz"
                 target="_blank"
                 rel="noreferrer"
-                className="font-medium text-emerald-600 hover:underline"
+                className="font-medium text-emerald-400 hover:text-emerald-300 hover:underline"
               >
                 CDCGroup
               </a>
-              <span className="text-slate-400 mx-1">/</span>
+              <span className="mx-1 text-zinc-600">/</span>
               <a
                 href="https://cdcgroup.uz"
                 target="_blank"
                 rel="noreferrer"
-                className="font-medium text-emerald-600 hover:underline"
+                className="font-medium text-emerald-400 hover:text-emerald-300 hover:underline"
               >
                 CraDev Company
               </a>
             </span>
-            <span className="text-slate-400 hidden sm:inline">·</span>
-            <span className="inline-flex items-center gap-1 whitespace-nowrap">
-              <Phone className="h-3 w-3 text-slate-400 shrink-0" aria-hidden />
-              <a href="tel:+998907863888" className="hover:text-emerald-600 hover:underline">
-                +998 90 786 38 88
-              </a>
+            <span className="hidden sm:inline text-zinc-600">·</span>
+            <span className="inline-flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
+              {CONTACT.phones.map((p, i) => (
+                <span key={p.tel} className="inline-flex items-center gap-1 whitespace-nowrap">
+                  {i > 0 && <span className="hidden sm:inline text-zinc-600">·</span>}
+                  <Phone className="h-3 w-3 shrink-0 text-zinc-600" aria-hidden />
+                  <a href={`tel:${p.tel}`} className="text-zinc-400 hover:text-emerald-400 hover:underline">
+                    {p.display}
+                  </a>
+                </span>
+              ))}
             </span>
-            <span className="text-slate-400">·</span>
+            <span className="text-zinc-600">·</span>
             <span className="inline-flex items-center gap-1.5">
               <a
                 href="https://t.me/Xazrat_bro"
                 target="_blank"
                 rel="noreferrer"
                 aria-label="Telegram"
-                className="p-0.5 rounded hover:bg-emerald-50"
+                className="rounded p-0.5 text-emerald-400 transition-colors hover:bg-white/10"
               >
-                <Send className="h-3.5 w-3.5 text-emerald-700" />
+                <Send className="h-3.5 w-3.5" />
               </a>
               <a
                 href="https://www.instagram.com/islom_cdcgroup?igsh=MXVtejdibTUzY281ZQ=="
                 target="_blank"
                 rel="noreferrer"
                 aria-label="Instagram"
-                className="p-0.5 rounded hover:bg-emerald-50"
+                className="rounded p-0.5 text-emerald-400 transition-colors hover:bg-white/10"
               >
-                <Instagram className="h-3.5 w-3.5 text-emerald-700" />
+                <Instagram className="h-3.5 w-3.5" />
               </a>
             </span>
           </div>
@@ -1917,7 +1920,7 @@ export default function LandingPage() {
       {quickViewProduct && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50" onClick={() => setQuickViewProduct(null)} />
-          <div className="relative bg-white rounded-xl max-w-lg w-full max-h-[85vh] overflow-y-auto shadow-xl">
+          <div className="relative bg-white rounded-xl max-w-lg w-full max-h-[85vh] overflow-y-auto shadow-lg border border-zinc-200">
             <button onClick={() => setQuickViewProduct(null)} className="absolute top-3 right-3 w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center hover:bg-slate-200 z-10">
               <X className="h-4 w-4" />
             </button>
@@ -1968,7 +1971,7 @@ export default function LandingPage() {
       {showBackToTop && (
         <button
           onClick={scrollToTop}
-          className="fixed bottom-20 right-4 z-50 w-10 h-10 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full shadow-lg flex items-center justify-center transition-all"
+          className="fixed bottom-20 right-4 z-50 w-10 h-10 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full shadow-md flex items-center justify-center transition-colors"
           aria-label="Yuqoriga"
         >
           <ArrowUp className="h-4 w-4" />
@@ -1977,9 +1980,11 @@ export default function LandingPage() {
 
       {/* Toast Notification */}
       {toast && (
-        <div className={`fixed bottom-4 right-4 z-[100] px-3 py-2 rounded-lg shadow-lg flex items-center gap-2 text-sm ${
-          toast.type === 'success' ? 'bg-emerald-500' : toast.type === 'error' ? 'bg-red-500' : 'bg-blue-500'
-        } text-white`}>
+        <div
+          className={`fixed bottom-4 right-4 z-[100] px-3 py-2 rounded-lg shadow-md flex items-center gap-2 text-sm text-white border border-white/10 ${
+            toast.type === 'success' ? 'bg-emerald-600' : toast.type === 'error' ? 'bg-red-600' : 'bg-blue-600'
+          }`}
+        >
           {toast.type === 'success' ? <Check className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
           <span className="font-medium">{toast.message}</span>
           <button onClick={() => setToast(null)} className="ml-1 hover:opacity-70"><X className="h-3 w-3" /></button>
@@ -1988,7 +1993,7 @@ export default function LandingPage() {
 
       {/* Cookie Consent */}
       {showCookieConsent && (
-        <div className="fixed bottom-0 left-0 right-0 z-[90] bg-slate-900 text-white p-4 shadow-2xl">
+        <div className="fixed bottom-0 left-0 right-0 z-[90] bg-zinc-900 text-white p-4 border-t border-zinc-700 shadow-lg">
           <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-start gap-3">
               <Shield className="h-5 w-5 text-emerald-400 mt-0.5" />

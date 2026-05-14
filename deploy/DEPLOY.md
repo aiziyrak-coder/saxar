@@ -166,8 +166,7 @@ Agar brauzer HSTS bilan “qotib” qolgan bo‘lsa: `chrome://net-internals/#hs
 **Email:** ba’zi serverlarda `sudo -E` muhitni bermaydi — emailni **birinchi argument** qiling:
 
 ```bash
-cd /opt/saxar && git pull
-sudo bash deploy/fix_saxar_https.sh 'sizning@email.uz'
+cd /opt/saxar && git pull && sudo bash deploy/fix_saxar_https.sh 'sizning@email.uz'
 ```
 
 Skript **`/etc/nginx/sites-enabled/saxar.uz.conf` yo‘q bo‘lsa**, avval **`saxar.uz.http-only.conf`** qo‘yadi (faqat saxar fayli), keyin certbot, keyin to‘liq SSL `saxar.uz.conf`.
@@ -191,15 +190,27 @@ sudo nginx -t && sudo systemctl reload nginx
 
 Sertifikat yo‘llari `saxar.uz` va `api.saxar.uz` uchun letsencrypt katalogiga mos kelishi kerak; boshqacha bo‘lsa, `ssl_certificate` qatorlarini tahrirlang.
 
-## 7) Yangilash (pull + qayta build)
+## 7) Push va serverni yangilash — **bitta qator**
+
+Kundalik sikl (loyiha ildizidan; `SERVER` o‘rniga IP yoki domen, masalan `167.71.53.238`; SSH kalit yoki agent sozlangan bo‘lishi kerak):
 
 ```bash
-cd /opt/saxar
-git pull
-docker compose -f docker-compose.saxar-prod.yml --env-file .env.saxar up -d --build
+git add -A && git commit -m "xabar" && git push && ssh root@SERVER "cd /opt/saxar && git pull && docker compose -f docker-compose.saxar-prod.yml --env-file .env.saxar up -d --build"
 ```
 
-Backend (API) ishlayotganini tekshirish:
+Agar `git push` allaqachon qilingan bo‘lsa — faqat server (bitta qator):
+
+```bash
+ssh root@SERVER "cd /opt/saxar && git pull && docker compose -f docker-compose.saxar-prod.yml --env-file .env.saxar up -d --build"
+```
+
+SSH ishlatmasdan, to‘g‘ridan-to‘g‘ri server konsolida (bitta qator):
+
+```bash
+cd /opt/saxar && git pull && docker compose -f docker-compose.saxar-prod.yml --env-file .env.saxar up -d --build
+```
+
+Backend (API) tekshiruvi:
 
 ```bash
 docker compose -f docker-compose.saxar-prod.yml --env-file .env.saxar ps
@@ -208,20 +219,15 @@ curl -sS http://127.0.0.1:18181/api/health/
 
 `saxar.uz` uchun host nginx repoda yangilangan bo‘lsa (masalan `/api/` endi to‘g‘ridan-to‘g‘ri `18181` ga), faylni qayta nusxalab `nginx -t` va `reload` qiling — `remote_bootstrap.sh` buni avtomatik qiladi.
 
-## GitHub — mahalliy mashinadan push
+### 7a) GitHub — dastlabki (bir marta)
 
 Loyiha ildizida:
 
 ```bash
-git init
-git remote add origin https://github.com/aiziyrak-coder/saxar.git
-git add -A
-git commit -m "Initial SaxarERP"
-git branch -M main
-git push -u origin main
+git init && git remote add origin https://github.com/aiziyrak-coder/saxar.git && git add -A && git commit -m "Initial SaxarERP" && git branch -M main && git push -u origin main
 ```
 
-Autentifikatsiya so‘ralsa — GitHub **PAT** yoki `gh auth login` / SSH kalit ishlating.
+(`git remote` allaqachon bo‘lsa, faqat `git add` / `commit` / `push` qiling.) Autentifikatsiya so‘ralsa — GitHub **PAT** yoki `gh auth login` / SSH kalit ishlating.
 
 ## 8) Mahalliy mashinadan Paramiko (avtomatik deploy)
 

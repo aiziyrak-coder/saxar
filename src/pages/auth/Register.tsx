@@ -151,30 +151,29 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen bg-emerald-50 text-slate-900 flex flex-col justify-center px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+    <div className="min-h-screen bg-zinc-50 text-zinc-800 flex flex-col justify-center px-4 sm:px-6 lg:px-8 relative overflow-hidden antialiased">
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -left-32 top-[-10%] h-72 w-72 rounded-full bg-emerald-500/30 blur-3xl" />
-        <div className="absolute right-[-10%] bottom-[-10%] h-80 w-80 rounded-full bg-purple-300/30 blur-3xl" />
+        <div className="absolute right-0 top-0 h-72 w-72 rounded-full bg-emerald-200/25 blur-3xl" />
       </div>
       <div className="w-full relative z-10 flex flex-col items-center">
         <div className="w-full flex justify-start mb-4">
           <Button
             variant="outline"
             size="sm"
-            className="gap-2 border-emerald-200/60 bg-white/60 hover:bg-white transition-colors"
+            className="gap-2"
             onClick={() => navigate('/')}
           >
             <ArrowLeft className="h-4 w-4" />
             Bosh sahifa
           </Button>
         </div>
-        <div className="flex justify-center text-emerald-700 mb-4">
-          <Package className="h-12 w-12" />
+        <div className="flex justify-center text-emerald-600 mb-4">
+          <Package className="h-10 w-10" />
         </div>
-        <h2 className="text-center text-2xl sm:text-3xl font-extrabold text-slate-900">
+        <h2 className="text-center text-2xl sm:text-3xl font-semibold text-zinc-900 tracking-tight">
           B2B Ro'yxatdan o'tish
         </h2>
-        <p className="mt-2 text-center text-xs sm:text-sm text-slate-600">
+        <p className="mt-2 text-center text-xs sm:text-sm text-zinc-600">
           Ulgurji narxlarda xarid qilish uchun do'koningizni ro'yxatdan o'tkazing
         </p>
       </div>

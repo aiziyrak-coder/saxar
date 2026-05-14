@@ -1,24 +1,111 @@
 @import "tailwindcss";
 
+/* class-based theme: `dark:` faqat `html.dark` bo‘lganda (OS tungi rejimidan mustaqil) */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @layer base {
   :root {
-    --app-bg: 246 255 249; /* #f6fff9 */
+    --app-bg: 250 250 250; /* zinc-50 — yengil fon */
     --card-bg: 255 255 255;
-    --card-border: 52 211 153; /* emerald-500 */
-    --text: 15 23 42; /* slate-900 */
-    --muted: 71 85 105; /* slate-600 */
-    --accent: 16 185 129; /* emerald-500 */
+    --card-border: 228 228 231; /* zinc-200 */
+    --text: 39 39 42; /* zinc-800 */
+    --muted: 113 113 122; /* zinc-500 */
+    --accent: 5 150 105; /* emerald-600 */
+    --sb-size: 6px;
+    --sb-track: color-mix(in srgb, rgb(148 163 184) 22%, transparent);
+    --sb-thumb-a: #a7f3d0;
+    --sb-thumb-b: #34d399;
+    --sb-thumb-c: #059669;
+  }
+
+  html {
+    color-scheme: light;
+    font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  html.dark {
+    color-scheme: dark;
   }
 
   body {
     background: rgb(var(--app-bg));
     color: rgb(var(--text));
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
 
   .dark {
     --app-bg: 15 23 42;
     --text: 248 250 252;
     --muted: 148 163 184;
+    --sb-track: color-mix(in srgb, rgb(51 65 85) 55%, transparent);
+    --sb-thumb-a: #5eead4;
+    --sb-thumb-b: #14b8a6;
+    --sb-thumb-c: #0f766e;
+  }
+
+  /* Firefox */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--sb-thumb-b) var(--sb-track);
+  }
+
+  /* Chromium / Safari — no default arrows, thin track */
+  *::-webkit-scrollbar {
+    width: var(--sb-size);
+    height: var(--sb-size);
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: var(--sb-track);
+    border-radius: 9999px;
+    margin: 2px;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    background-image: linear-gradient(
+      145deg,
+      var(--sb-thumb-a) 0%,
+      var(--sb-thumb-b) 48%,
+      var(--sb-thumb-c) 100%
+    );
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35);
+  }
+
+  html.dark *::-webkit-scrollbar-thumb {
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12);
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    filter: brightness(1.06);
+  }
+}
+
+@layer utilities {
+  .scrollbar-hide {
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
   }
 }
 

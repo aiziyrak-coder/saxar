@@ -26,6 +26,7 @@ const AdminWMS = lazy(() => import('./pages/admin/AdminWMS'));
 const AdminFinance = lazy(() => import('./pages/admin/AdminFinance'));
 const AdminReports = lazy(() => import('./pages/admin/AdminReports'));
 const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'));
+const AdminLandingSettings = lazy(() => import('./pages/admin/AdminLandingSettings'));
 const AdminProduction = lazy(() => import('./pages/admin/AdminProduction'));
 const AdminAgents = lazy(() => import('./pages/admin/AdminAgents'));
 const AdminLogistics = lazy(() => import('./pages/admin/AdminLogistics'));
@@ -79,7 +80,7 @@ function AppRoutes() {
   );
 
   return (
-    <div className="min-h-screen bg-emerald-50 text-slate-900">
+    <div className="min-h-screen bg-zinc-50 text-zinc-800 antialiased dark:bg-slate-950 dark:text-slate-100">
       <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<Login />} />
@@ -107,6 +108,7 @@ function AppRoutes() {
             <Route path="wms" element={<Suspense fallback={<PageLoader />}><AdminWMS /></Suspense>} />
             <Route path="finance" element={<Suspense fallback={<PageLoader />}><AdminFinance /></Suspense>} />
             <Route path="reports" element={<Suspense fallback={<PageLoader />}><AdminReports /></Suspense>} />
+            <Route path="landing-settings" element={<Suspense fallback={<PageLoader />}><AdminLandingSettings /></Suspense>} />
             <Route path="settings" element={<Suspense fallback={<PageLoader />}><AdminSettings /></Suspense>} />
             <Route path="production" element={<Suspense fallback={<PageLoader />}><AdminProduction /></Suspense>} />
             <Route path="agents" element={<Suspense fallback={<PageLoader />}><AdminAgents /></Suspense>} />

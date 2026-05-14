@@ -13,6 +13,23 @@ export const BRAND = {
     "Saxar O'zbekistonda go'sht-kolbasani tabiiy xomashyo va zamonaviy texnologiya bilan tayyorlaydi. Zavoddan tortib sizga yetkazguncha mahsulot sovuqda saqlanadi — yo'lda ham taza ta'm va xavfsizlik saqlanadi.",
 } as const;
 
+/** Rasmiy bog'lanish va vitrinada ko'rsatiladigan kategoriyalar (kompaniya ma'lumotnomasi) */
+export const CONTACT = {
+  phones: [
+    { tel: '+998959840099', display: '+998 95 984 00 99' },
+    { tel: '+998999994187', display: '+998 99 999 41 87' },
+  ],
+  addressLine: "Farg'ona viloyati, Bog'dod tumani, Farovon ko'cha",
+  /** Katalog bo'limlari — saytda ro'yxat sifatida */
+  showcaseCategories: [
+    "Go'sht mahsulotlari",
+    'Pishloqlar',
+    'Tuz, ketchup, mayonez',
+    'Konserva mahsulotlari',
+    'Chuchvara',
+  ],
+} as const;
+
 export const DEMO_USER_STORAGE_KEY = 'saxar_demo_user';
 const LEGACY_DEMO_KEYS = ['sahar_demo_user'] as const;
 

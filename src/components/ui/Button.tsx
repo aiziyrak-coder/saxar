@@ -15,18 +15,18 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = 'primary', size = 'md', ...props }, ref) => {
     const variants = {
       primary:
-        'bg-gradient-to-r from-emerald-400 to-emerald-500 text-white shadow-[0_14px_40px_rgba(52,211,153,0.45)] ' +
-        'hover:from-emerald-300 hover:to-emerald-400 active:scale-[0.97]',
+        'bg-emerald-600 text-white shadow-sm shadow-emerald-900/10 hover:bg-emerald-700 ' +
+        'active:scale-[0.99] active:brightness-95',
       secondary:
-        'bg-white/75 text-slate-900 border border-emerald-200/60 backdrop-blur-2xl ' +
-        'hover:bg-white/95 active:scale-[0.97]',
+        'bg-white text-slate-800 border border-zinc-200 hover:bg-zinc-50 hover:border-zinc-300 ' +
+        'active:scale-[0.99]',
       outline:
-        'border border-emerald-400/50 text-emerald-600 bg-white/55 backdrop-blur-2xl ' +
-        'hover:bg-emerald-400/10 active:scale-[0.97]',
-      ghost: 'text-slate-700 hover:bg-emerald-500/10 active:scale-[0.97]',
+        'border border-zinc-300 text-emerald-700 bg-white hover:bg-emerald-50/80 hover:border-emerald-200 ' +
+        'active:scale-[0.99]',
+      ghost: 'text-zinc-700 hover:bg-zinc-100 active:scale-[0.99]',
       danger:
-        'bg-gradient-to-r from-rose-500 to-red-500 text-white shadow-[0_16px_45px_rgba(248,113,113,0.45)] ' +
-        'hover:from-rose-400 hover:to-red-400 active:scale-[0.97]',
+        'bg-rose-600 text-white shadow-sm shadow-rose-900/10 hover:bg-rose-700 ' +
+        'active:scale-[0.99]',
     };
 
     const sizes = {
@@ -39,10 +39,10 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         className={cn(
-          'inline-flex items-center justify-center rounded-full font-medium ' +
-            'transition-all duration-300 disabled:opacity-50 disabled:pointer-events-none ' +
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/80 ' +
-            'focus-visible:ring-offset-2 focus-visible:ring-offset-emerald-50',
+          'inline-flex items-center justify-center rounded-lg font-medium ' +
+            'transition-colors duration-200 disabled:opacity-50 disabled:pointer-events-none ' +
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 ' +
+            'focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-50',
           variants[variant],
           sizes[size],
           className

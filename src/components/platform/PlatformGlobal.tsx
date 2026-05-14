@@ -17,6 +17,12 @@ const ADMIN_COMMANDS: CommandItem[] = [
   { id: 'f', label: 'Moliya', path: roleSubPath('admin', 'finance') },
   { id: 'r', label: 'Hisobotlar', path: roleSubPath('admin', 'reports') },
   { id: 's', label: 'Sozlamalar', path: roleSubPath('admin', 'settings') },
+  {
+    id: 'L',
+    label: 'Bosh sahifa (landing)',
+    path: roleSubPath('admin', 'landing-settings'),
+    keywords: 'sayt vitrina matn rasm',
+  },
   { id: 'p', label: 'Ishlab chiqarish', path: roleSubPath('admin', 'production') },
   { id: 'a', label: 'Agentlar', path: roleSubPath('admin', 'agents') },
   { id: 'l', label: 'Logistika', path: roleSubPath('admin', 'logistics') },
