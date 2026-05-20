@@ -3,12 +3,14 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
-import { Search, Plus, MapPin, Phone, Building2, CheckCircle2, AlertCircle, Loader2, XCircle } from 'lucide-react';
+import { Search, Plus, MapPin, Phone, Building2, CheckCircle2, AlertCircle, Loader2, XCircle, Download } from 'lucide-react';
 import { collection, getDocs, query, orderBy, limit, doc, updateDoc } from 'firebase/firestore';
 import { tryGetFirebaseDb } from '../../firebase';
 import { useAuth } from '../../context/AuthContext';
 import { clientService, getClientBalance } from '../../services/firestore';
 import { logAudit, AuditActions, EntityTypes } from '../../services/audit';
+import { useDebouncedValue } from '../../platform/useDebouncedValue';
+import { downloadCsv } from '../../platform/csv';
 import { addNotification } from '../../platform/notifications';
 import type { Client } from '../../types';
 
@@ -21,6 +23,7 @@ const REGIONS = [
 export default function AdminClients() {
   const { userData } = useAuth();
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 300);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [balances, setBalances] = useState<Record<string, number>>({});
@@ -159,10 +162,25 @@ export default function AdminClients() {
   };
 
   const filteredClients = clients.filter(c =>
-    c.name?.toLowerCase().includes(search.toLowerCase()) ||
-    c.stir?.includes(search) ||
-    c.ownerName?.toLowerCase().includes(search.toLowerCase())
+    c.name?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+    c.stir?.includes(debouncedSearch) ||
+    c.ownerName?.toLowerCase().includes(debouncedSearch.toLowerCase())
   );
+
+  const exportClientsCsv = () => {
+    const rows = filteredClients.map(c => ({
+      nomi: c.name,
+      egasi: c.ownerName,
+      telefon: c.phone,
+      stir: c.stir,
+      hudud: c.region,
+      manzil: c.address,
+      status: c.status,
+      qarzdorlik: balances[c.id] ?? 0,
+    }));
+    downloadCsv(`mijozlar-${Date.now()}.csv`, rows);
+    addNotification('CSV eksport', `${rows.length} ta mijoz yuklandi.`);
+  };
 
   const formatCurrency = (n: number) => new Intl.NumberFormat('uz-UZ', { maximumFractionDigits: 0 }).format(n);
   const statusLabel = (c: Client) => {
@@ -184,14 +202,19 @@ export default function AdminClients() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-2xl font-bold text-slate-900">Mijozlar (B2B)</h1>
-        <Button
-          variant="primary"
-          className="gap-2"
-          type="button"
-          onClick={() => setShowCreateModal(true)}
-        >
-          <Plus className="h-4 w-4" /> Yangi mijoz
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" className="gap-2" type="button" onClick={exportClientsCsv}>
+            <Download className="h-4 w-4" /> CSV
+          </Button>
+          <Button
+            variant="primary"
+            className="gap-2"
+            type="button"
+            onClick={() => setShowCreateModal(true)}
+          >
+            <Plus className="h-4 w-4" /> Yangi mijoz
+          </Button>
+        </div>
       </div>
 
       <Card className="p-0 overflow-hidden">

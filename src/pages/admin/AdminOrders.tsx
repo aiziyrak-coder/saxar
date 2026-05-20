@@ -9,6 +9,7 @@ import { downloadCsv } from '../../platform/csv';
 import { copyToClipboard } from '../../platform/clipboard';
 import { printHtmlDocument } from '../../platform/printHtml';
 import { buildOrderReceiptHtml, type OrderReceiptLike } from '../../platform/orderReceipt';
+import { normalizeSku } from '../../platform/skuFormat';
 import { addNotification } from '../../platform/notifications';
 import { ORDER_NOTE_TEMPLATES } from '../../platform/orderNoteTemplates';
 import { useFirestore } from '../../hooks/useFirestore';
@@ -114,7 +115,7 @@ export default function AdminOrders() {
           id: `item-${idx}`,
           productId: item.productId,
           productName: item.productName,
-          sku: '',
+          sku: normalizeSku(products.find(p => p.id === item.productId)?.sku || ''),
           unit: 'kg',
           quantity: item.quantity,
           unitPrice: item.unitPrice,

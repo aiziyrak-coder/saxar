@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Factory, Package, LogOut, Menu, Bell } from 'lucide-react';
+import { LayoutDashboard, Factory, Package, LogOut, Menu, Bell, Sun, Moon } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { NotificationPanel } from '../components/platform/NotificationPanel';
 
 const navItems = [
@@ -14,6 +15,7 @@ export default function ProductionLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { userData, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [notifOpen, setNotifOpen] = useState(false);
 
@@ -76,6 +78,9 @@ export default function ProductionLayout() {
             {navItems.find(i => i.path === location.pathname)?.label || 'Ishlab chiqarish'}
           </h1>
           <div className="flex items-center gap-4">
+            <button onClick={toggleTheme} className="p-2 rounded-lg hover:bg-slate-100 transition-colors" title="Mavzu">
+              {theme === 'light' ? <Moon className="h-5 w-5 text-slate-600" /> : <Sun className="h-5 w-5 text-yellow-500" />}
+            </button>
             <button
               type="button"
               className="p-2 text-slate-600 hover:text-slate-900 relative transition-colors"

@@ -7,6 +7,7 @@ import { Modal } from '../../components/ui/Modal';
 import { Wallet, TrendingUp, TrendingDown, FileText, Download, Building2, Loader2 } from 'lucide-react';
 import { useFirestore } from '../../hooks/useFirestore';
 import { downloadCsv } from '../../platform/csv';
+import { extractVatFromInclusive } from '../../platform/vat';
 import { addNotification, notifyPlannedFeature } from '../../platform/notifications';
 import { useAuth } from '../../context/AuthContext';
 import type { Payment, Expense, Client, ExpenseCategory } from '../../types';
@@ -482,6 +483,12 @@ export default function AdminFinance() {
               value={paymentForm.amount || ''}
               onChange={(e) => setPaymentForm(f => ({ ...f, amount: Number(e.target.value) || 0 }))}
             />
+            {paymentForm.amount > 0 && (
+              <div className="text-xs text-slate-500 bg-slate-50 p-2 rounded-lg">
+                QQS 12%: {extractVatFromInclusive(paymentForm.amount, 12).vat.toLocaleString()} UZS | 
+                Asosiy: {extractVatFromInclusive(paymentForm.amount, 12).net.toLocaleString()} UZS
+              </div>
+            )}
           </div>
           <Input
             placeholder="Mijoz nomi"

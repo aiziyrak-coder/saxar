@@ -4,6 +4,7 @@
  */
 
 import { logger } from './logger';
+import { withRetry } from '../platform/withRetry';
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -190,9 +191,9 @@ class ApiService {
     }
   }
 
-  // HTTP methods
+  // HTTP methods — GET requests use withRetry for network resilience
   get<T>(endpoint: string, params?: Record<string, string>): Promise<T> {
-    return this.request<T>(endpoint, { method: 'GET', params });
+    return withRetry(() => this.request<T>(endpoint, { method: 'GET', params }), 3, 500);
   }
 
   post<T>(endpoint: string, data: unknown): Promise<T> {

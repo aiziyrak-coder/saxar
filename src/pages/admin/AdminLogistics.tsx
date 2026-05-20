@@ -5,6 +5,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
 import { Truck, MapPin, CheckCircle2, Clock, AlertCircle, Loader2 } from 'lucide-react';
+import { addBusinessDays } from '../../platform/businessDays';
 import { notifyPlannedFeature, addNotification } from '../../platform/notifications';
 import { useFirestore } from '../../hooks/useFirestore';
 import type { Delivery, User } from '../../types';
@@ -251,6 +252,11 @@ export default function AdminLogistics() {
                 value={form.date}
                 onChange={(e) => setForm(f => ({ ...f, date: e.target.value }))}
               />
+              {form.date && (
+                <div className="text-xs text-slate-500 mt-1">
+                  Yetkazish muddati (3 ish kuni): {addBusinessDays(new Date(form.date), 3).toLocaleDateString('uz-UZ')}
+                </div>
+              )}
             </div>
           </div>
           <Input
