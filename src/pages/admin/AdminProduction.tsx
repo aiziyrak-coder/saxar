@@ -2,24 +2,85 @@ import { useState } from 'react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { Search, Plus, Play, CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
-import { notifyPlannedFeature } from '../../platform/notifications';
+import { Modal } from '../../components/ui/Modal';
+import { Search, Plus, Play, CheckCircle2, Clock, AlertTriangle, Loader2 } from 'lucide-react';
+import { useFirestore } from '../../hooks/useFirestore';
+import { addNotification, notifyPlannedFeature } from '../../platform/notifications';
+import { useAuth } from '../../context/AuthContext';
+import type { Product } from '../../types';
+
+interface ProductionOrder {
+  id: string;
+  product: string;
+  productId: string;
+  quantity: number;
+  unit: string;
+  status: string;
+  progress: number;
+  startDate: string;
+  endDate: string;
+  createdBy: string;
+  createdByName: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export default function AdminProduction() {
+  const { userData } = useAuth();
   const [search, setSearch] = useState('');
+  const { data: products } = useFirestore<Product>('products');
+  const { data: productionOrders, create: createProductionOrder } = useFirestore<ProductionOrder>('production_orders');
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    productId: '',
+    productName: '',
+    quantity: 0,
+    unit: 'kg',
+    startDate: new Date().toISOString().split('T')[0],
+    endDate: '',
+  });
 
-  const productionOrders: {
-    id: string;
-    product: string;
-    quantity: number;
-    unit: string;
-    status: string;
-    progress: number;
-    startDate: string;
-    endDate: string;
-  }[] = [];
+  const handleProductSelect = (productId: string) => {
+    const product = products.find(p => p.id === productId);
+    setForm(f => ({
+      ...f,
+      productId,
+      productName: product?.name || '',
+      unit: product?.unit || 'kg',
+    }));
+  };
 
-  const rawMaterials: { name: string; stock: number; unit: string; status: string }[] = [];
+  const handleCreate = async () => {
+    if (!form.productName.trim() || form.quantity <= 0) return;
+    setSaving(true);
+    try {
+      await createProductionOrder({
+        product: form.productName,
+        productId: form.productId,
+        quantity: form.quantity,
+        unit: form.unit,
+        status: 'Kutilmoqda',
+        progress: 0,
+        startDate: form.startDate,
+        endDate: form.endDate,
+        createdBy: userData?.uid || '',
+        createdByName: userData?.name || '',
+      } as Omit<ProductionOrder, 'id'>);
+      setShowCreateModal(false);
+      setForm({ productId: '', productName: '', quantity: 0, unit: 'kg', startDate: new Date().toISOString().split('T')[0], endDate: '' });
+      addNotification('Ishlab chiqarish', 'Yangi buyurtma muvaffaqiyatli yaratildi.');
+    } catch (e) {
+      console.error(e);
+      addNotification('Xatolik', 'Buyurtma yaratishda xatolik yuz berdi.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const filteredOrders = productionOrders.filter(o =>
+    o.product?.toLowerCase().includes(search.toLowerCase()) || o.id?.includes(search)
+  );
 
   return (
     <div className="space-y-6">
@@ -29,7 +90,7 @@ export default function AdminProduction() {
           variant="primary"
           className="gap-2"
           type="button"
-          onClick={() => notifyPlannedFeature('Yangi ishlab chiqarish buyurtmasi')}
+          onClick={() => setShowCreateModal(true)}
         >
           <Plus className="h-4 w-4" /> Yangi buyurtma
         </Button>
@@ -61,15 +122,15 @@ export default function AdminProduction() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {productionOrders.length === 0 ? (
+                {filteredOrders.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="py-10 px-6 text-center text-slate-500">
-                      Namuna ishlab chiqarish qatorlari olib tashlangan. Ma’lumotlar Firestore ulanishi bilan to‘ldiriladi.
+                      Ishlab chiqarish buyurtmalari yo&apos;q. &quot;Yangi buyurtma&quot; tugmasini bosing.
                     </td>
                   </tr>
                 ) : (
-                  productionOrders.map((order, i) => (
-                  <tr key={i} className="hover:bg-slate-50 transition-colors">
+                  filteredOrders.map((order) => (
+                  <tr key={order.id} className="hover:bg-slate-50 transition-colors">
                     <td className="py-4 px-6">
                       <div className="font-bold text-slate-900">{order.product}</div>
                       <div className="text-xs text-slate-500">{order.id}</div>
@@ -101,14 +162,14 @@ export default function AdminProduction() {
                     </td>
                     <td className="py-4 px-6 text-sm text-slate-600">
                       <div>Bosh: {order.startDate}</div>
-                      <div>Tug: {order.endDate}</div>
+                      <div>Tug: {order.endDate || '\u2014'}</div>
                     </td>
                     <td className="py-4 px-6 text-right">
                       <Button
                         variant="ghost"
                         size="sm"
                         type="button"
-                        onClick={() => notifyPlannedFeature('Partiya tafsilotlari', `${order.id} — batafsil rejada.`)}
+                        onClick={() => notifyPlannedFeature('Partiya tafsilotlari', `${order.id} \u2014 batafsil rejada.`)}
                       >
                         Batafsil
                       </Button>
@@ -123,26 +184,8 @@ export default function AdminProduction() {
 
         <div className="space-y-6">
           <Card>
-            <h3 className="font-bold text-slate-900 mb-4">Xomashyo qoldig'i</h3>
-            <div className="space-y-4">
-              {rawMaterials.length === 0 ? (
-                <p className="text-sm text-slate-500">Xomashyo qoldiqlari hozircha ko‘rsatilmaydi.</p>
-              ) : (
-                rawMaterials.map((material, i) => (
-                  <div key={i} className="flex items-center justify-between border-b border-slate-100 pb-3 last:border-0 last:pb-0">
-                    <div>
-                      <div className="font-medium text-slate-900">{material.name}</div>
-                      <div className={`text-xs font-medium mt-0.5 ${material.status === 'Yaxshi' ? 'text-emerald-600' : 'text-amber-600'}`}>
-                        {material.status}
-                      </div>
-                    </div>
-                    <div className="font-bold text-slate-900">
-                      {material.stock.toLocaleString()} <span className="text-slate-500 text-sm font-normal">{material.unit}</span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
+            <h3 className="font-bold text-slate-900 mb-4">Xomashyo qoldig&apos;i</h3>
+            <p className="text-sm text-slate-500">Xomashyo qoldiqlari hozircha ko&apos;rsatilmaydi.</p>
             <Button
               variant="outline"
               className="w-full mt-4"
@@ -164,11 +207,81 @@ export default function AdminProduction() {
               type="button"
               onClick={() => notifyPlannedFeature('Retseptura (BOM)')}
             >
-              Retseptlarni ko'rish
+              Retseptlarni ko&apos;rish
             </Button>
           </Card>
         </div>
       </div>
+
+      <Modal isOpen={showCreateModal} onClose={() => !saving && setShowCreateModal(false)} title="Yangi ishlab chiqarish buyurtmasi" size="md">
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Mahsulot *</label>
+            <select
+              className="block w-full rounded-full border-emerald-200/60 bg-white/75 py-2.5 pl-3 pr-10 text-slate-900 border text-sm"
+              value={form.productId}
+              onChange={(e) => handleProductSelect(e.target.value)}
+            >
+              <option value="">Mahsulot tanlang</option>
+              {products.map(p => (
+                <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
+              ))}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Miqdor *</label>
+              <Input
+                type="number"
+                min="1"
+                value={form.quantity || ''}
+                onChange={(e) => setForm(f => ({ ...f, quantity: Number(e.target.value) || 0 }))}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Birlik</label>
+              <select
+                className="block w-full rounded-full border-emerald-200/60 bg-white/75 py-2.5 pl-3 pr-10 text-slate-900 border text-sm"
+                value={form.unit}
+                onChange={(e) => setForm(f => ({ ...f, unit: e.target.value }))}
+              >
+                <option value="kg">kg</option>
+                <option value="g">g</option>
+                <option value="l">l</option>
+                <option value="pcs">dona</option>
+                <option value="box">quti</option>
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Boshlash sanasi</label>
+              <Input
+                type="date"
+                value={form.startDate}
+                onChange={(e) => setForm(f => ({ ...f, startDate: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Tugash sanasi</label>
+              <Input
+                type="date"
+                value={form.endDate}
+                onChange={(e) => setForm(f => ({ ...f, endDate: e.target.value }))}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button type="button" variant="outline" onClick={() => setShowCreateModal(false)} disabled={saving}>
+              Bekor qilish
+            </Button>
+            <Button type="button" variant="primary" onClick={handleCreate} disabled={saving || !form.productName.trim() || form.quantity <= 0}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Saqlash
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

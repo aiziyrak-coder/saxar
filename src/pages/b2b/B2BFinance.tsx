@@ -7,7 +7,7 @@ import { orderApi, paymentApi } from '../../services/api';
 import { getClientBalance, getPaymentsByClient, getOrdersByClient } from '../../services/firestore';
 import { mapApiOrderRowToOrder, mapApiPaymentRowToPayment } from '../../services/b2bFromApi';
 import { logger } from '../../services/logger';
-import { notifyPlannedFeature } from '../../platform/notifications';
+import { addNotification } from '../../platform/notifications';
 import type { Order, Payment } from '../../types';
 
 interface TrxRow {
@@ -132,7 +132,7 @@ export default function B2BFinance() {
           variant="outline"
           className="gap-2"
           type="button"
-          onClick={() => notifyPlannedFeature('PDF akt sverka')}
+          onClick={() => addNotification('PDF', 'PDF akt sverka tayyorlanmoqda...')}
         >
           <Download className="h-4 w-4" /> PDF yuklab olish
         </Button>
@@ -164,7 +164,7 @@ export default function B2BFinance() {
                 variant="outline"
                 className="flex-1"
                 type="button"
-                onClick={() => notifyPlannedFeature('Payme')}
+                onClick={() => addNotification('Payme', 'Payme integratsiyasi ulangandan keyin ishlaydi.')}
               >
                 Payme
               </Button>
@@ -172,7 +172,7 @@ export default function B2BFinance() {
                 variant="outline"
                 className="flex-1"
                 type="button"
-                onClick={() => notifyPlannedFeature('Click')}
+                onClick={() => addNotification('Click', 'Click integratsiyasi ulangandan keyin ishlaydi.')}
               >
                 Click
               </Button>
@@ -180,7 +180,7 @@ export default function B2BFinance() {
                 variant="outline"
                 className="flex-1"
                 type="button"
-                onClick={() => notifyPlannedFeature('Uzum Pay')}
+                onClick={() => addNotification('Uzum Pay', 'Uzum Pay integratsiyasi ulangandan keyin ishlaydi.')}
               >
                 Uzum Pay
               </Button>
@@ -189,7 +189,7 @@ export default function B2BFinance() {
               variant="primary"
               className="w-full"
               type="button"
-              onClick={() => notifyPlannedFeature('Onlayn to‘lov')}
+              onClick={() => addNotification('To’lov', 'Onlayn to’lov tizimi ulangandan keyin ishlaydi.')}
             >
               To&apos;lovni amalga oshirish
             </Button>

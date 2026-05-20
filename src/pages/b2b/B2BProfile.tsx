@@ -12,6 +12,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useMemo, useState } from 'react';
 import { addNotification, notifyPlannedFeature } from '../../platform/notifications';
 import { useFirestore } from '../../hooks/useFirestore';
+import { userService } from '../../services/firestore';
 import type { Client, Order, OrderStatus } from '../../types';
 
 export default function B2BProfile() {
@@ -431,7 +432,7 @@ export default function B2BProfile() {
                       variant="primary"
                       className="w-full sm:w-auto"
                       type="button"
-                      onClick={() => notifyPlannedFeature('Kompaniya ma’lumotlarini saqlash')}
+                      onClick={async () => { if (userData?.uid) { try { await userService.update(userData.uid, { name: userData.name, companyName: userData.companyName }); addNotification('Saqlandi', 'Kompaniya ma’lumotlari saqlandi.'); } catch { addNotification('Xatolik', 'Saqlashda xatolik.'); } } }}
                     >
                       Saqlash
                     </Button>
@@ -461,7 +462,7 @@ export default function B2BProfile() {
                       variant="primary"
                       className="w-full sm:w-auto"
                       type="button"
-                      onClick={() => notifyPlannedFeature('Parolni yangilash')}
+                      onClick={() => addNotification('Parol', 'Parolni yangilash uchun Firebase Auth sozlamalari kerak.')}
                     >
                       Parolni yangilash
                     </Button>

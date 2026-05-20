@@ -3,23 +3,25 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
-import { Search, Filter, ShoppingCart, CheckCircle2, Clock, AlertCircle, Truck, Download, Printer, Copy } from 'lucide-react';
+import { Search, ShoppingCart, CheckCircle2, Clock, AlertCircle, Truck, Download, Printer, Copy, Plus, Trash2, Loader2 } from 'lucide-react';
 import { useDebouncedValue } from '../../platform/useDebouncedValue';
 import { downloadCsv } from '../../platform/csv';
 import { copyToClipboard } from '../../platform/clipboard';
 import { printHtmlDocument } from '../../platform/printHtml';
 import { buildOrderReceiptHtml, type OrderReceiptLike } from '../../platform/orderReceipt';
-import { addNotification, notifyPlannedFeature } from '../../platform/notifications';
+import { addNotification } from '../../platform/notifications';
 import { ORDER_NOTE_TEMPLATES } from '../../platform/orderNoteTemplates';
 import { useFirestore } from '../../hooks/useFirestore';
-import type { Order, OrderStatus } from '../../types';
+import { generateOrderNumber } from '../../services/firestore';
+import { useAuth } from '../../context/AuthContext';
+import type { Order, OrderStatus, Product, Client } from '../../types';
 
 interface OrderRow extends OrderReceiptLike {}
 
 const ORDER_STATUS_UZ: Record<OrderStatus, string> = {
   pending: 'Yangi',
   confirmed: 'Tasdiqlangan',
-  picking: 'Yig‘ilmoqda',
+  picking: 'Yig\u2019ilmoqda',
   packed: 'Qadoqlangan',
   in_transit: 'Yetkazilmoqda',
   delivered: 'Yakunlangan',
@@ -30,7 +32,7 @@ const ORDER_STATUS_UZ: Record<OrderStatus, string> = {
 function mapOrderToRow(o: Order): OrderRow {
   const dateStr = o.orderDate
     ? new Date(o.orderDate).toLocaleString('uz-UZ', { dateStyle: 'medium', timeStyle: 'short' })
-    : '—';
+    : '\u2014';
   const lineKinds = new Set(o.items.map((i) => i.productId || i.productName)).size;
   return {
     id: o.orderNumber || o.id,
@@ -39,16 +41,108 @@ function mapOrderToRow(o: Order): OrderRow {
     amount: o.totalAmount,
     status: ORDER_STATUS_UZ[o.status] ?? o.status,
     items: lineKinds || o.items.length,
-    agent: o.agentName || o.createdByName || '—',
+    agent: o.agentName || o.createdByName || '\u2014',
   };
 }
 
+interface OrderItemForm {
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+}
+
 export default function AdminOrders() {
-  const { data: orders, loading: ordersLoading } = useFirestore<Order>('orders');
+  const { userData } = useAuth();
+  const { data: orders, loading: ordersLoading, create: createOrder } = useFirestore<Order>('orders');
+  const { data: products } = useFirestore<Product>('products');
+  const { data: clients } = useFirestore<Client>('clients');
   const [search, setSearch] = useState('');
   const debounced = useDebouncedValue(search, 300);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [detail, setDetail] = useState<OrderRow | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [orderForm, setOrderForm] = useState({
+    clientId: '',
+    clientName: '',
+    clientPhone: '',
+    clientAddress: '',
+    notes: '',
+  });
+
+  const handleClientSelect = (clientId: string) => {
+    const client = clients.find(c => c.id === clientId);
+    setOrderForm(f => ({
+      ...f,
+      clientId,
+      clientName: client?.name || '',
+      clientPhone: client?.phone || '',
+      clientAddress: client?.address || '',
+    }));
+  };
+  const [orderItems, setOrderItems] = useState<OrderItemForm[]>([
+    { productId: '', productName: '', quantity: 1, unitPrice: 0 },
+  ]);
+
+  const orderTotal = orderItems.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+
+  const handleProductSelect = (idx: number, productId: string) => {
+    const product = products.find(p => p.id === productId);
+    setOrderItems(prev => prev.map((item, i) =>
+      i === idx
+        ? { ...item, productId, productName: product?.name || '', unitPrice: product?.basePrice || 0 }
+        : item
+    ));
+  };
+
+  const handleCreateOrder = async () => {
+    if (!orderForm.clientName.trim() || orderItems.every(i => !i.productName)) return;
+    setSaving(true);
+    try {
+      const orderNumber = generateOrderNumber();
+      const validItems = orderItems.filter(i => i.productName.trim());
+      await createOrder({
+        orderNumber,
+        source: 'admin',
+        status: 'pending',
+        clientId: orderForm.clientId,
+        clientName: orderForm.clientName.trim(),
+        clientPhone: orderForm.clientPhone.trim(),
+        clientAddress: orderForm.clientAddress.trim(),
+        items: validItems.map((item, idx) => ({
+          id: `item-${idx}`,
+          productId: item.productId,
+          productName: item.productName,
+          sku: '',
+          unit: 'kg',
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          discountPercent: 0,
+          totalPrice: item.quantity * item.unitPrice,
+        })),
+        subtotal: orderTotal,
+        discountAmount: 0,
+        deliveryFee: 0,
+        totalAmount: orderTotal,
+        paidAmount: 0,
+        paymentStatus: 'pending',
+        orderDate: new Date().toISOString(),
+        notes: orderForm.notes.trim(),
+        createdBy: userData?.uid || '',
+        createdByName: userData?.name || '',
+      } as Omit<Order, 'id'>);
+      setShowCreateModal(false);
+      setOrderForm({ clientId: '', clientName: '', clientPhone: '', clientAddress: '', notes: '' });
+      setOrderItems([{ productId: '', productName: '', quantity: 1, unitPrice: 0 }]);
+      addNotification('Buyurtma yaratildi', `${orderNumber} muvaffaqiyatli saqlandi.`);
+    } catch (e) {
+      console.error(e);
+      addNotification('Xatolik', 'Buyurtma yaratishda xatolik yuz berdi.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const rows = useMemo(() => orders.map(mapOrderToRow), [orders]);
 
@@ -113,18 +207,10 @@ export default function AdminOrders() {
             <Download className="h-4 w-4" /> CSV ({selectedRows.length || filteredOrders.length})
           </Button>
           <Button
-            variant="outline"
-            className="gap-2"
-            type="button"
-            onClick={() => notifyPlannedFeature('Filtr', 'Status va sana bo‘yicha filtrlash rejada.')}
-          >
-            <Filter className="h-4 w-4" /> Filtr
-          </Button>
-          <Button
             variant="primary"
             className="gap-2"
             type="button"
-            onClick={() => notifyPlannedFeature('Yangi buyurtma', 'Admin orqali yangi buyurtma yaratish rejada.')}
+            onClick={() => setShowCreateModal(true)}
           >
             <ShoppingCart className="h-4 w-4" /> Yangi buyurtma
           </Button>
@@ -207,7 +293,7 @@ export default function AdminOrders() {
                   </td>
                   <td className="py-4 px-6 text-right space-x-1 whitespace-nowrap">
                     <Button variant="ghost" size="sm" type="button" onClick={() => setDetail(order)}>
-                      Ko‘rish
+                      Ko&apos;rish
                     </Button>
                     <Button variant="ghost" size="sm" type="button" title="Nusxa" onClick={() => void copyToClipboard(order.id)}>
                       <Copy className="h-4 w-4" />
@@ -221,7 +307,7 @@ export default function AdminOrders() {
               {!ordersLoading && filteredOrders.length === 0 && (
                 <tr>
                   <td colSpan={7} className="py-8 text-center text-slate-400">
-                    {rows.length === 0 ? 'Hozircha buyurtmalar yo‘q' : 'Buyurtma topilmadi'}
+                    {rows.length === 0 ? 'Hozircha buyurtmalar yo\u2019q' : 'Buyurtma topilmadi'}
                   </td>
                 </tr>
               )}
@@ -259,6 +345,125 @@ export default function AdminOrders() {
             </div>
           </div>
         )}
+      </Modal>
+
+      <Modal isOpen={showCreateModal} onClose={() => !saving && setShowCreateModal(false)} title="Yangi buyurtma" size="lg">
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Mijoz *</label>
+            {clients.length > 0 ? (
+              <select
+                className="block w-full rounded-full border-emerald-200/60 bg-white/75 py-2.5 pl-3 pr-10 text-slate-900 border text-sm"
+                value={orderForm.clientId}
+                onChange={(e) => handleClientSelect(e.target.value)}
+              >
+                <option value="">Mijoz tanlang</option>
+                {clients.map(c => (
+                  <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>
+                ))}
+              </select>
+            ) : (
+              <Input
+                placeholder="Mijoz nomi *"
+                value={orderForm.clientName}
+                onChange={(e) => setOrderForm(f => ({ ...f, clientName: e.target.value }))}
+              />
+            )}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              placeholder="Telefon"
+              value={orderForm.clientPhone}
+              onChange={(e) => setOrderForm(f => ({ ...f, clientPhone: e.target.value }))}
+            />
+            <Input
+              placeholder="Manzil"
+              value={orderForm.clientAddress}
+              onChange={(e) => setOrderForm(f => ({ ...f, clientAddress: e.target.value }))}
+            />
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-slate-700">Mahsulotlar</label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1"
+                onClick={() => setOrderItems(prev => [...prev, { productId: '', productName: '', quantity: 1, unitPrice: 0 }])}
+              >
+                <Plus className="h-3 w-3" /> Qo&apos;shish
+              </Button>
+            </div>
+            <div className="space-y-2">
+              {orderItems.map((item, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <select
+                    className="flex-1 rounded-full border-emerald-200/60 bg-white/75 py-2.5 pl-3 pr-10 text-slate-900 border text-sm"
+                    value={item.productId}
+                    onChange={(e) => handleProductSelect(idx, e.target.value)}
+                  >
+                    <option value="">Mahsulot tanlang</option>
+                    {products.map(p => (
+                      <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
+                    ))}
+                  </select>
+                  <Input
+                    type="number"
+                    min="1"
+                    className="w-20"
+                    placeholder="Soni"
+                    value={item.quantity}
+                    onChange={(e) => setOrderItems(prev => prev.map((it, i) => i === idx ? { ...it, quantity: Number(e.target.value) || 0 } : it))}
+                  />
+                  <Input
+                    type="number"
+                    min="0"
+                    className="w-28"
+                    placeholder="Narx"
+                    value={item.unitPrice}
+                    onChange={(e) => setOrderItems(prev => prev.map((it, i) => i === idx ? { ...it, unitPrice: Number(e.target.value) || 0 } : it))}
+                  />
+                  <span className="text-sm font-medium text-slate-600 w-24 text-right">
+                    {(item.quantity * item.unitPrice).toLocaleString()}
+                  </span>
+                  {orderItems.length > 1 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setOrderItems(prev => prev.filter((_, i) => i !== idx))}
+                    >
+                      <Trash2 className="h-4 w-4 text-red-500" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+            <span className="text-sm text-slate-500">Jami:</span>
+            <span className="text-lg font-bold text-slate-900">{orderTotal.toLocaleString()} UZS</span>
+          </div>
+
+          <Input
+            placeholder="Izoh (ixtiyoriy)"
+            value={orderForm.notes}
+            onChange={(e) => setOrderForm(f => ({ ...f, notes: e.target.value }))}
+          />
+
+          <div className="flex justify-end gap-3 pt-2">
+            <Button type="button" variant="outline" onClick={() => setShowCreateModal(false)} disabled={saving}>
+              Bekor qilish
+            </Button>
+            <Button type="button" variant="primary" onClick={handleCreateOrder} disabled={saving || !orderForm.clientName.trim()}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Saqlash
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

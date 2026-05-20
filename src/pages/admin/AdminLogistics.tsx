@@ -1,24 +1,78 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { where, type QueryConstraint } from 'firebase/firestore';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { Truck, MapPin, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
-import { notifyPlannedFeature } from '../../platform/notifications';
+import { Input } from '../../components/ui/Input';
+import { Modal } from '../../components/ui/Modal';
+import { Truck, MapPin, CheckCircle2, Clock, AlertCircle, Loader2 } from 'lucide-react';
+import { notifyPlannedFeature, addNotification } from '../../platform/notifications';
 import { useFirestore } from '../../hooks/useFirestore';
-import type { Delivery } from '../../types';
+import type { Delivery, User } from '../../types';
 
 function deliveryStatusUz(status: Delivery['status']): string {
   switch (status) {
     case 'completed':
       return 'Yakunlandi';
     case 'in_progress':
-      return "Yo'lda";
+      return "Yo\u2019lda";
     default:
       return 'Rejada';
   }
 }
 
+const DRIVER_CONSTRAINTS: QueryConstraint[] = [where('role', '==', 'driver')];
+
 export default function AdminLogistics() {
-  const { data: deliveries, loading } = useFirestore<Delivery>('deliveries');
+  const { data: deliveries, loading, create: createDelivery } = useFirestore<Delivery>('deliveries');
+  const { data: drivers } = useFirestore<User>('users', DRIVER_CONSTRAINTS);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    driverId: '',
+    driverName: '',
+    vehicleNumber: '',
+    date: new Date().toISOString().split('T')[0],
+    notes: '',
+  });
+
+  const handleDriverSelect = (driverId: string) => {
+    const driver = drivers.find(d => (d.id ?? d.uid) === driverId);
+    setForm(f => ({
+      ...f,
+      driverId,
+      driverName: driver?.name || '',
+      vehicleNumber: driver?.vehicleNumber || f.vehicleNumber,
+    }));
+  };
+
+  const handleCreate = async () => {
+    if (!form.driverName.trim() || !form.date) return;
+    setSaving(true);
+    try {
+      const routeId = `RT-${Date.now().toString(36).toUpperCase()}`;
+      await createDelivery({
+        routeId,
+        driverId: form.driverId,
+        driverName: form.driverName.trim(),
+        vehicleNumber: form.vehicleNumber.trim(),
+        date: form.date,
+        status: 'planned',
+        orders: [],
+        totalCashCollected: 0,
+        totalCardCollected: 0,
+        notes: form.notes.trim(),
+        createdAt: new Date().toISOString(),
+      } as Omit<Delivery, 'id'>);
+      setShowCreateModal(false);
+      setForm({ driverId: '', driverName: '', vehicleNumber: '', date: new Date().toISOString().split('T')[0], notes: '' });
+      addNotification('Marshrut yaratildi', `${routeId} muvaffaqiyatli saqlandi.`);
+    } catch (e) {
+      console.error(e);
+      addNotification('Xatolik', 'Marshrut yaratishda xatolik yuz berdi.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const rows = useMemo(
     () =>
@@ -32,7 +86,7 @@ export default function AdminLogistics() {
                 .map((o) => o.clientAddress || o.clientName)
                 .filter(Boolean)
                 .slice(0, 3)
-                .join(' → ') || d.routeId
+                .join(' \u2192 ') || d.routeId
             : d.routeId;
         return {
           id: d.id,
@@ -56,7 +110,7 @@ export default function AdminLogistics() {
           variant="primary"
           className="gap-2"
           type="button"
-          onClick={() => notifyPlannedFeature('Yangi marshrut')}
+          onClick={() => setShowCreateModal(true)}
         >
           <Truck className="h-4 w-4" /> Yangi marshrut
         </Button>
@@ -67,7 +121,7 @@ export default function AdminLogistics() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-4">
           {!loading && rows.length === 0 && (
-            <Card className="p-6 text-slate-500">Hozircha yetkazib berish yozuvlari yo‘q (`deliveries`).</Card>
+            <Card className="p-6 text-slate-500">Hozircha yetkazib berish yozuvlari yo&apos;q. &quot;Yangi marshrut&quot; tugmasini bosing.</Card>
           )}
           {rows.map((delivery) => (
             <Card key={delivery.id} className="flex flex-col sm:flex-row gap-6 items-start sm:items-center">
@@ -78,13 +132,13 @@ export default function AdminLogistics() {
                     className={`px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${
                       delivery.status === 'Yakunlandi'
                         ? 'bg-emerald-100 text-emerald-700'
-                        : delivery.status === "Yo'lda"
+                        : delivery.status === "Yo\u2019lda"
                           ? 'bg-emerald-100 text-emerald-700'
                           : 'bg-amber-100 text-amber-700'
                     }`}
                   >
                     {delivery.status === 'Yakunlandi' && <CheckCircle2 className="h-3 w-3" />}
-                    {delivery.status === "Yo'lda" && <Truck className="h-3 w-3" />}
+                    {delivery.status === "Yo\u2019lda" && <Truck className="h-3 w-3" />}
                     {delivery.status === 'Rejada' && <Clock className="h-3 w-3" />}
                     {delivery.status}
                   </span>
@@ -99,7 +153,7 @@ export default function AdminLogistics() {
 
                   <div className="text-slate-500">Marshrut:</div>
                   <div className="font-medium text-slate-900 flex items-center gap-1">
-                    <MapPin className="h-3 w-3 text-slate-400" /> {delivery.route || '—'}
+                    <MapPin className="h-3 w-3 text-slate-400" /> {delivery.route || '\u2014'}
                   </div>
                 </div>
               </div>
@@ -129,12 +183,12 @@ export default function AdminLogistics() {
             <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
               <AlertCircle className="h-5 w-5 text-amber-500" /> Vozvratlar (Qaytarish)
             </h3>
-            <p className="text-sm text-slate-500 mb-4">Namuna qaytarishlar olib tashlangan. Ro‘yxat keyinchalik ma’lumotlar bazasiga ulanadi.</p>
+            <p className="text-sm text-slate-500 mb-4">Qaytarishlar ro&apos;yxati keyinchalik ma&apos;lumotlar bazasiga ulanadi.</p>
             <Button
               variant="outline"
               className="w-full mt-4"
               type="button"
-              onClick={() => notifyPlannedFeature('Vozvratlar ro‘yxati')}
+              onClick={() => notifyPlannedFeature('Vozvratlar ro\u2019yxati')}
             >
               Barchasini ko&apos;rish
             </Button>
@@ -157,6 +211,64 @@ export default function AdminLogistics() {
           </Card>
         </div>
       </div>
+
+      <Modal isOpen={showCreateModal} onClose={() => !saving && setShowCreateModal(false)} title="Yangi marshrut" size="md">
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Haydovchi *</label>
+            {drivers.length > 0 ? (
+              <select
+                className="block w-full rounded-full border-emerald-200/60 bg-white/75 py-2.5 pl-3 pr-10 text-slate-900 border text-sm"
+                value={form.driverId}
+                onChange={(e) => handleDriverSelect(e.target.value)}
+              >
+                <option value="">Haydovchi tanlang</option>
+                {drivers.map(d => (
+                  <option key={d.id ?? d.uid} value={d.id ?? d.uid}>{d.name} {d.vehicleNumber ? `(${d.vehicleNumber})` : ''}</option>
+                ))}
+              </select>
+            ) : (
+              <Input
+                placeholder="Haydovchi ismi *"
+                value={form.driverName}
+                onChange={(e) => setForm(f => ({ ...f, driverName: e.target.value }))}
+              />
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Transport raqami</label>
+              <Input
+                placeholder="01 A 123 AA"
+                value={form.vehicleNumber}
+                onChange={(e) => setForm(f => ({ ...f, vehicleNumber: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Sana *</label>
+              <Input
+                type="date"
+                value={form.date}
+                onChange={(e) => setForm(f => ({ ...f, date: e.target.value }))}
+              />
+            </div>
+          </div>
+          <Input
+            placeholder="Izoh (ixtiyoriy)"
+            value={form.notes}
+            onChange={(e) => setForm(f => ({ ...f, notes: e.target.value }))}
+          />
+          <div className="flex justify-end gap-3 pt-2">
+            <Button type="button" variant="outline" onClick={() => setShowCreateModal(false)} disabled={saving}>
+              Bekor qilish
+            </Button>
+            <Button type="button" variant="primary" onClick={handleCreate} disabled={saving || !form.driverName.trim()}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Saqlash
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -1,16 +1,35 @@
-import { useMemo } from 'react';
-import { where } from 'firebase/firestore';
+import { useMemo, useState } from 'react';
+import { where, type QueryConstraint } from 'firebase/firestore';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { Users, MapPin, Target, TrendingUp } from 'lucide-react';
-import { notifyPlannedFeature } from '../../platform/notifications';
+import { Input } from '../../components/ui/Input';
+import { Modal } from '../../components/ui/Modal';
+import { Users, MapPin, Target, TrendingUp, Loader2 } from 'lucide-react';
+import { notifyPlannedFeature, addNotification } from '../../platform/notifications';
 import { useFirestore } from '../../hooks/useFirestore';
+import { userService } from '../../services/firestore';
 import type { Client, Order, User } from '../../types';
 
+const REGIONS = [
+  'Toshkent shahri', 'Toshkent viloyati', 'Samarqand', 'Buxoro', 'Farg\u2019ona',
+  'Andijon', 'Namangan', 'Qashqadaryo', 'Surxondaryo', 'Jizzax',
+  'Sirdaryo', 'Xorazm', 'Navoiy', 'Qoraqalpog\u2019iston',
+];
+
+const AGENT_CONSTRAINTS: QueryConstraint[] = [where('role', '==', 'agent')];
+
 export default function AdminAgents() {
-  const { data: agentUsers, loading: agentsLoading } = useFirestore<User>('users', [where('role', '==', 'agent')]);
+  const { data: agentUsers, loading: agentsLoading, refresh: refreshAgents } = useFirestore<User>('users', AGENT_CONSTRAINTS);
   const { data: allClients } = useFirestore<Client>('clients');
   const { data: allOrders } = useFirestore<Order>('orders');
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    region: '',
+  });
 
   const monthStart = useMemo(() => {
     const d = new Date();
@@ -38,7 +57,7 @@ export default function AdminAgents() {
       return {
         id: u.id ?? uid,
         name: u.name,
-        region: u.region ?? '—',
+        region: u.region ?? '\u2014',
         plan: 0,
         fact,
         shops: shops.length,
@@ -46,6 +65,32 @@ export default function AdminAgents() {
       };
     });
   }, [agentUsers, allClients, allOrders, monthStart]);
+
+  const handleCreateAgent = async () => {
+    if (!form.name.trim() || !form.phone.trim()) return;
+    setSaving(true);
+    try {
+      const uid = `agent_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      await userService.create({
+        uid,
+        email: form.email.trim() || `${form.phone.trim()}@saxar.uz`,
+        phone: form.phone.trim(),
+        role: 'agent',
+        name: form.name.trim(),
+        status: 'active',
+        region: form.region,
+      } as Omit<User, 'id'>);
+      setShowCreateModal(false);
+      setForm({ name: '', email: '', phone: '', region: '' });
+      addNotification('Agent yaratildi', `${form.name} muvaffaqiyatli saqlandi.`);
+      refreshAgents();
+    } catch (e) {
+      console.error(e);
+      addNotification('Xatolik', 'Agent yaratishda xatolik yuz berdi.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -55,7 +100,7 @@ export default function AdminAgents() {
           variant="primary"
           className="gap-2"
           type="button"
-          onClick={() => notifyPlannedFeature('Yangi agent')}
+          onClick={() => setShowCreateModal(true)}
         >
           <Users className="h-4 w-4" /> Yangi agent
         </Button>
@@ -63,7 +108,7 @@ export default function AdminAgents() {
 
       {agentsLoading && <p className="text-slate-500 text-sm">Yuklanmoqda...</p>}
       {!agentsLoading && agents.length === 0 && (
-        <p className="text-slate-500">Hozircha agent foydalanuvchilari yo‘q (Firestore `users`, role=agent).</p>
+        <p className="text-slate-500">Hozircha agent foydalanuvchilari yo&apos;q (Firestore `users`, role=agent).</p>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -90,7 +135,7 @@ export default function AdminAgents() {
                       <Target className="h-3 w-3" /> Reja
                     </span>
                     <span className="font-medium text-slate-900">
-                      {agent.plan > 0 ? `${(agent.plan / 1_000_000).toFixed(0)}M` : '—'}
+                      {agent.plan > 0 ? `${(agent.plan / 1_000_000).toFixed(0)}M` : '\u2014'}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm mb-1">
@@ -112,7 +157,7 @@ export default function AdminAgents() {
                       <div className="text-right text-xs font-bold mt-1 text-slate-700">{percent}%</div>
                     </>
                   ) : (
-                    <p className="text-xs text-slate-500 mt-2">Reja kiritilmagan — foiz ko‘rsatilmaydi.</p>
+                    <p className="text-xs text-slate-500 mt-2">Reja kiritilmagan \u2014 foiz ko&apos;rsatilmaydi.</p>
                   )}
                 </div>
 
@@ -152,6 +197,49 @@ export default function AdminAgents() {
           );
         })}
       </div>
+
+      <Modal isOpen={showCreateModal} onClose={() => !saving && setShowCreateModal(false)} title="Yangi agent" size="md">
+        <div className="space-y-4">
+          <Input
+            placeholder="To&apos;liq ism *"
+            value={form.name}
+            onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))}
+          />
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              placeholder="Telefon *"
+              value={form.phone}
+              onChange={(e) => setForm(f => ({ ...f, phone: e.target.value }))}
+            />
+            <Input
+              placeholder="Email"
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm(f => ({ ...f, email: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Hudud</label>
+            <select
+              className="block w-full rounded-full border-emerald-200/60 bg-white/75 py-2.5 pl-3 pr-10 text-slate-900 border text-sm"
+              value={form.region}
+              onChange={(e) => setForm(f => ({ ...f, region: e.target.value }))}
+            >
+              <option value="">Tanlang</option>
+              {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button type="button" variant="outline" onClick={() => setShowCreateModal(false)} disabled={saving}>
+              Bekor qilish
+            </Button>
+            <Button type="button" variant="primary" onClick={handleCreateAgent} disabled={saving || !form.name.trim() || !form.phone.trim()}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Saqlash
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

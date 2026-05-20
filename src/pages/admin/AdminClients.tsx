@@ -2,14 +2,21 @@ import { useState, useEffect } from 'react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { Modal } from '../../components/ui/Modal';
 import { Search, Plus, MapPin, Phone, Building2, CheckCircle2, AlertCircle, Loader2, XCircle } from 'lucide-react';
 import { collection, getDocs, query, orderBy, limit, doc, updateDoc } from 'firebase/firestore';
 import { tryGetFirebaseDb } from '../../firebase';
 import { useAuth } from '../../context/AuthContext';
-import { getClientBalance } from '../../services/firestore';
+import { clientService, getClientBalance } from '../../services/firestore';
 import { logAudit, AuditActions, EntityTypes } from '../../services/audit';
-import { notifyPlannedFeature } from '../../platform/notifications';
+import { addNotification } from '../../platform/notifications';
 import type { Client } from '../../types';
+
+const REGIONS = [
+  'Toshkent shahri', 'Toshkent viloyati', 'Samarqand', 'Buxoro', 'Farg\u2019ona',
+  'Andijon', 'Namangan', 'Qashqadaryo', 'Surxondaryo', 'Jizzax',
+  'Sirdaryo', 'Xorazm', 'Navoiy', 'Qoraqalpog\u2019iston',
+];
 
 export default function AdminClients() {
   const { userData } = useAuth();
@@ -18,8 +25,23 @@ export default function AdminClients() {
   const [loading, setLoading] = useState(true);
   const [balances, setBalances] = useState<Record<string, number>>({});
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [clientForm, setClientForm] = useState({
+    name: '',
+    ownerName: '',
+    phone: '',
+    stir: '',
+    companyName: '',
+    address: '',
+    region: '',
+    paymentType: 'cash' as 'cash' | 'transfer' | 'mixed',
+    creditLimit: 0,
+    creditDays: 14,
+    discountPercent: 0,
+  });
 
-  useEffect(() => {
+  const fetchClients = () => {
     const db = tryGetFirebaseDb();
     if (!db) {
       setClients([]);
@@ -43,6 +65,10 @@ export default function AdminClients() {
       }));
       setBalances(bal);
     }).finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchClients();
   }, []);
 
   const handleApprove = async (client: Client) => {
@@ -95,6 +121,43 @@ export default function AdminClients() {
     }
   };
 
+  const handleCreateClient = async () => {
+    if (!clientForm.name.trim() || !clientForm.phone.trim()) return;
+    setSaving(true);
+    try {
+      await clientService.create({
+        name: clientForm.name.trim(),
+        ownerName: clientForm.ownerName.trim(),
+        phone: clientForm.phone.trim(),
+        stir: clientForm.stir.trim(),
+        companyName: clientForm.companyName.trim(),
+        address: clientForm.address.trim(),
+        region: clientForm.region,
+        paymentType: clientForm.paymentType,
+        creditLimit: clientForm.creditLimit,
+        creditDays: clientForm.creditDays,
+        discountPercent: clientForm.discountPercent,
+        status: 'active',
+        registrationStatus: 'approved',
+        currentBalance: 0,
+        totalPurchases: 0,
+      } as Omit<Client, 'id'>);
+      setShowCreateModal(false);
+      setClientForm({
+        name: '', ownerName: '', phone: '', stir: '', companyName: '',
+        address: '', region: '', paymentType: 'cash', creditLimit: 0,
+        creditDays: 14, discountPercent: 0,
+      });
+      addNotification('Mijoz yaratildi', `${clientForm.name} muvaffaqiyatli saqlandi.`);
+      fetchClients();
+    } catch (e) {
+      console.error(e);
+      addNotification('Xatolik', 'Mijoz yaratishda xatolik yuz berdi.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const filteredClients = clients.filter(c =>
     c.name?.toLowerCase().includes(search.toLowerCase()) ||
     c.stir?.includes(search) ||
@@ -106,7 +169,7 @@ export default function AdminClients() {
     if (c.registrationStatus === 'pending') return { label: 'Tasdiq kutilmoqda', className: 'bg-amber-500/20 text-amber-200 border border-amber-500/30' };
     if (c.status === 'active') return { label: 'Faol', className: 'bg-emerald-500/20 text-emerald-200 border border-emerald-500/30' };
     if (c.status === 'inactive') return { label: 'Nofaol', className: 'bg-emerald-500/15 text-slate-900 border border-emerald-200/60' };
-    return { label: c.status || '—', className: 'bg-emerald-500/15 text-slate-900 border border-emerald-200/60' };
+    return { label: c.status || '\u2014', className: 'bg-emerald-500/15 text-slate-900 border border-emerald-200/60' };
   };
 
   if (loading) {
@@ -125,7 +188,7 @@ export default function AdminClients() {
           variant="primary"
           className="gap-2"
           type="button"
-          onClick={() => notifyPlannedFeature('Yangi mijoz', 'Qo‘lda mijoz qo‘shish rejada.')}
+          onClick={() => setShowCreateModal(true)}
         >
           <Plus className="h-4 w-4" /> Yangi mijoz
         </Button>
@@ -172,11 +235,11 @@ export default function AdminClients() {
                         <Phone className="h-3 w-3 text-slate-400" /> {client.phone}
                       </div>
                       <div className="flex items-center gap-1 text-xs">
-                        <MapPin className="h-3 w-3 text-slate-400" /> {client.address || '—'}
+                        <MapPin className="h-3 w-3 text-slate-400" /> {client.address || '\u2014'}
                       </div>
                     </td>
                     <td className="py-4 px-6 text-sm font-medium text-slate-200">
-                      {client.region || '—'}
+                      {client.region || '\u2014'}
                     </td>
                     <td className={`py-4 px-6 text-sm font-bold ${(balances[client.id] ?? 0) > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
                       {formatCurrency(balances[client.id] ?? 0)} UZS
@@ -212,16 +275,6 @@ export default function AdminClients() {
                           </Button>
                         </div>
                       )}
-                      {client.registrationStatus !== 'pending' && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          type="button"
-                          onClick={() => notifyPlannedFeature('Mijoz kartasi', client.name || client.id)}
-                        >
-                          Batafsil
-                        </Button>
-                      )}
                     </td>
                   </tr>
                 );
@@ -237,6 +290,109 @@ export default function AdminClients() {
           </table>
         </div>
       </Card>
+
+      <Modal isOpen={showCreateModal} onClose={() => !saving && setShowCreateModal(false)} title="Yangi mijoz" size="lg">
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              placeholder="Do&apos;kon / korxona nomi *"
+              value={clientForm.name}
+              onChange={(e) => setClientForm(f => ({ ...f, name: e.target.value }))}
+            />
+            <Input
+              placeholder="Egasi (FIO)"
+              value={clientForm.ownerName}
+              onChange={(e) => setClientForm(f => ({ ...f, ownerName: e.target.value }))}
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              placeholder="Telefon raqami *"
+              value={clientForm.phone}
+              onChange={(e) => setClientForm(f => ({ ...f, phone: e.target.value }))}
+            />
+            <Input
+              placeholder="STIR (INN)"
+              value={clientForm.stir}
+              onChange={(e) => setClientForm(f => ({ ...f, stir: e.target.value }))}
+            />
+          </div>
+          <Input
+            placeholder="Kompaniya nomi"
+            value={clientForm.companyName}
+            onChange={(e) => setClientForm(f => ({ ...f, companyName: e.target.value }))}
+          />
+          <Input
+            placeholder="Manzil"
+            value={clientForm.address}
+            onChange={(e) => setClientForm(f => ({ ...f, address: e.target.value }))}
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Hudud</label>
+              <select
+                className="block w-full rounded-full border-emerald-200/60 bg-white/75 py-2.5 pl-3 pr-10 text-slate-900 border text-sm"
+                value={clientForm.region}
+                onChange={(e) => setClientForm(f => ({ ...f, region: e.target.value }))}
+              >
+                <option value="">Tanlang</option>
+                {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">To&apos;lov turi</label>
+              <select
+                className="block w-full rounded-full border-emerald-200/60 bg-white/75 py-2.5 pl-3 pr-10 text-slate-900 border text-sm"
+                value={clientForm.paymentType}
+                onChange={(e) => setClientForm(f => ({ ...f, paymentType: e.target.value as 'cash' | 'transfer' | 'mixed' }))}
+              >
+                <option value="cash">Naqd</option>
+                <option value="transfer">Pul o&apos;tkazma</option>
+                <option value="mixed">Aralash</option>
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Kredit limit (UZS)</label>
+              <Input
+                type="number"
+                min="0"
+                value={clientForm.creditLimit}
+                onChange={(e) => setClientForm(f => ({ ...f, creditLimit: Number(e.target.value) || 0 }))}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Kredit kun</label>
+              <Input
+                type="number"
+                min="0"
+                value={clientForm.creditDays}
+                onChange={(e) => setClientForm(f => ({ ...f, creditDays: Number(e.target.value) || 0 }))}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Chegirma %</label>
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                value={clientForm.discountPercent}
+                onChange={(e) => setClientForm(f => ({ ...f, discountPercent: Number(e.target.value) || 0 }))}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button type="button" variant="outline" onClick={() => setShowCreateModal(false)} disabled={saving}>
+              Bekor qilish
+            </Button>
+            <Button type="button" variant="primary" onClick={handleCreateClient} disabled={saving || !clientForm.name.trim() || !clientForm.phone.trim()}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Saqlash
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

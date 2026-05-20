@@ -7,7 +7,7 @@ import { Modal } from '../../components/ui/Modal';
 import { Search, Plus, AlertTriangle, Barcode, ArrowRightLeft, Package, Calendar } from 'lucide-react';
 import { useFirestore } from '../../hooks/useFirestore';
 import { inventoryService, generateBatchNumber } from '../../services/firestore';
-import { notifyPlannedFeature } from '../../platform/notifications';
+import { addNotification, notifyPlannedFeature } from '../../platform/notifications';
 import type { InventoryItem, Product } from '../../types';
 
 type WmsTabId = 'inventory' | 'transactions' | 'expiry';
@@ -25,8 +25,7 @@ export default function AdminWMS() {
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<'inventory' | 'transactions' | 'expiry'>('inventory');
   const [showStockInModal, setShowStockInModal] = useState(false);
-  const [_showTransferModal, setShowTransferModal] = useState(false);
-  const [_selectedProduct, _setSelectedProduct] = useState<Product | null>(null);
+  const [showTransferModal, setShowTransferModal] = useState(false);
   
   const { data: inventory, loading: inventoryLoading, refresh: refreshInventory } = useFirestore<InventoryItem>('inventory');
   const { data: products, loading: productsLoading } = useFirestore<Product>('products');
@@ -259,6 +258,53 @@ export default function AdminWMS() {
         </Card>
       )}
 
+      {/* Transactions Tab */}
+      {activeTab === 'transactions' && (
+        <Card className="p-0 overflow-hidden">
+          <div className="p-4 bg-slate-50 border-b border-slate-200">
+            <h3 className="font-medium text-slate-900">Kirim-chiqim operatsiyalari</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="py-3 px-6 font-semibold text-slate-600 text-sm uppercase tracking-wider">Mahsulot</th>
+                  <th className="py-3 px-6 font-semibold text-slate-600 text-sm uppercase tracking-wider">Partiya</th>
+                  <th className="py-3 px-6 font-semibold text-slate-600 text-sm uppercase tracking-wider">Miqdor</th>
+                  <th className="py-3 px-6 font-semibold text-slate-600 text-sm uppercase tracking-wider">Joylashuv</th>
+                  <th className="py-3 px-6 font-semibold text-slate-600 text-sm uppercase tracking-wider">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {inventory.length === 0 ? (
+                  <tr><td colSpan={5} className="py-8 text-center text-slate-500">Kirim-chiqim yozuvlari yo&apos;q</td></tr>
+                ) : (
+                  [...inventory]
+                    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                    .slice(0, 50)
+                    .map((item) => (
+                      <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="py-4 px-6">
+                          <div className="font-medium text-slate-900">{item.productName}</div>
+                          <div className="text-sm text-slate-500">{item.sku}</div>
+                        </td>
+                        <td className="py-4 px-6 text-sm text-slate-600">{item.batchNumber}</td>
+                        <td className="py-4 px-6 text-sm font-medium text-slate-900">{item.quantity} {item.unit}</td>
+                        <td className="py-4 px-6 text-sm text-slate-600">{item.location}</td>
+                        <td className="py-4 px-6">
+                          <Badge variant={item.status === 'available' ? 'success' : item.status === 'expired' ? 'error' : 'warning'}>
+                            {item.status}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
       {/* Expiry Tab */}
       {activeTab === 'expiry' && (
         <Card className="p-0 overflow-hidden">
@@ -331,6 +377,14 @@ export default function AdminWMS() {
         onClose={() => setShowStockInModal(false)}
         products={products}
         onSubmit={handleStockIn}
+      />
+
+      {/* Transfer Modal */}
+      <TransferModal
+        isOpen={showTransferModal}
+        onClose={() => setShowTransferModal(false)}
+        inventory={inventory}
+        onDone={refreshInventory}
       />
     </div>
   );
@@ -437,6 +491,80 @@ function StockInModal({ isOpen, onClose, products, onSubmit }: StockInModalProps
           </Button>
           <Button type="submit" variant="primary">
             Saqlash
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+interface TransferModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  inventory: InventoryItem[];
+  onDone: () => void;
+}
+
+function TransferModal({ isOpen, onClose, inventory, onDone }: TransferModalProps) {
+  const [formData, setFormData] = useState({ batchId: '', toLocation: '', quantity: '' });
+  const [saving, setSaving] = useState(false);
+
+  const availableBatches = inventory.filter(i => i.status === 'available' && i.quantity > 0);
+  const selectedBatch = availableBatches.find(b => b.id === formData.batchId);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedBatch || !formData.toLocation.trim()) return;
+    setSaving(true);
+    try {
+      await inventoryService.update(selectedBatch.id, { location: formData.toLocation.trim() });
+      addNotification('O\u2019tkazma', `${selectedBatch.productName} ${selectedBatch.location} \u2192 ${formData.toLocation} ga o\u2019tkazildi.`);
+      setFormData({ batchId: '', toLocation: '', quantity: '' });
+      onDone();
+      onClose();
+    } catch (err) {
+      console.error(err);
+      addNotification('Xatolik', 'O\u2019tkazma bajarilmadi.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Ombor ichida o\u2019tkazma" size="md">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Partiya</label>
+          <select
+            required
+            className="block w-full rounded-lg border-slate-300 py-2.5 px-3 text-slate-900 border focus:border-emerald-500 focus:ring-emerald-500"
+            value={formData.batchId}
+            onChange={(e) => setFormData({ ...formData, batchId: e.target.value })}
+          >
+            <option value="">Tanlang</option>
+            {availableBatches.map((b) => (
+              <option key={b.id} value={b.id}>{b.productName} ({b.batchNumber}) \u2014 {b.quantity} {b.unit} @ {b.location}</option>
+            ))}
+          </select>
+        </div>
+        {selectedBatch && (
+          <div className="text-sm text-slate-600 bg-slate-50 p-3 rounded-lg">
+            Joriy joy: <strong>{selectedBatch.location}</strong> | Miqdor: <strong>{selectedBatch.quantity} {selectedBatch.unit}</strong>
+          </div>
+        )}
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Yangi joylashuv</label>
+          <Input
+            required
+            value={formData.toLocation}
+            onChange={(e) => setFormData({ ...formData, toLocation: e.target.value })}
+            placeholder="Masalan: B-03"
+          />
+        </div>
+        <div className="flex justify-end gap-3 pt-4">
+          <Button type="button" variant="outline" onClick={onClose}>Bekor qilish</Button>
+          <Button type="submit" variant="primary" disabled={saving}>
+            {saving ? 'Saqlanmoqda...' : 'O\u2019tkazish'}
           </Button>
         </div>
       </form>

@@ -1,20 +1,52 @@
 import { useMemo, useState } from 'react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
 import { Badge } from '../../components/ui/Badge';
-import { Wallet, TrendingUp, TrendingDown, FileText, Download, Building2 } from 'lucide-react';
+import { Modal } from '../../components/ui/Modal';
+import { Wallet, TrendingUp, TrendingDown, FileText, Download, Building2, Loader2 } from 'lucide-react';
 import { useFirestore } from '../../hooks/useFirestore';
 import { downloadCsv } from '../../platform/csv';
 import { addNotification, notifyPlannedFeature } from '../../platform/notifications';
-import type { Payment, Expense, Client } from '../../types';
+import { useAuth } from '../../context/AuthContext';
+import type { Payment, Expense, Client, ExpenseCategory } from '../../types';
+
+const EXPENSE_CATEGORIES: { value: ExpenseCategory; label: string }[] = [
+  { value: 'salary', label: 'Ish haqi' },
+  { value: 'rent', label: 'Ijara' },
+  { value: 'utilities', label: 'Kommunal' },
+  { value: 'fuel', label: 'Yoqilg\u2019i' },
+  { value: 'maintenance', label: 'Ta\u2019mirlash' },
+  { value: 'tax', label: 'Soliq' },
+  { value: 'marketing', label: 'Marketing' },
+  { value: 'office', label: 'Ofis' },
+  { value: 'other', label: 'Boshqa' },
+];
 
 export default function AdminFinance() {
+  const { userData } = useAuth();
   const [activeTab, setActiveTab] = useState<'transactions' | 'aktsverka' | 'expenses'>('transactions');
-  
-  // Fetch data
-  const { data: payments } = useFirestore<Payment>('payments');
-  const { data: expenses } = useFirestore<Expense>('expenses');
+  const [showModal, setShowModal] = useState<'payment' | 'expense' | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const { data: payments, create: createPayment } = useFirestore<Payment>('payments');
+  const { data: expenses, create: createExpense } = useFirestore<Expense>('expenses');
   const { data: clients } = useFirestore<Client>('clients');
+
+  const [paymentForm, setPaymentForm] = useState({
+    direction: 'in' as 'in' | 'out',
+    type: 'cash' as Payment['type'],
+    amount: 0,
+    clientName: '',
+    description: '',
+  });
+
+  const [expenseForm, setExpenseForm] = useState({
+    category: 'other' as ExpenseCategory,
+    amount: 0,
+    description: '',
+    date: new Date().toISOString().split('T')[0],
+  });
 
   const monthStart = useMemo(() => {
     const d = new Date();
@@ -48,7 +80,6 @@ export default function AdminFinance() {
     return fromPayments + fromExpenses;
   }, [payments, expenses, monthStart]);
 
-  // Get recent transactions (payments + expenses combined)
   const allTransactions = [
     ...payments.map(p => ({
       id: p.id,
@@ -70,9 +101,7 @@ export default function AdminFinance() {
     })),
   ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-  // Get debtors
   const debtors = clients.filter(c => c.currentBalance > 0);
-  // Total receivables: debtors.reduce((sum, c) => sum + c.currentBalance, 0)
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('uz-UZ').format(amount);
@@ -91,6 +120,54 @@ export default function AdminFinance() {
     addNotification('Excel', `${rows.length} ta qator yuklandi.`);
   };
 
+  const handleSavePayment = async () => {
+    if (paymentForm.amount <= 0) return;
+    setSaving(true);
+    try {
+      await createPayment({
+        type: paymentForm.type,
+        direction: paymentForm.direction,
+        amount: paymentForm.amount,
+        currency: 'UZS',
+        clientName: paymentForm.clientName.trim(),
+        description: paymentForm.description.trim() || `${paymentForm.direction === 'in' ? 'Kirim' : 'Chiqim'} - ${paymentForm.type}`,
+        createdBy: userData?.uid || '',
+        createdByName: userData?.name || '',
+      } as Omit<Payment, 'id'>);
+      setShowModal(null);
+      setPaymentForm({ direction: 'in', type: 'cash', amount: 0, clientName: '', description: '' });
+      addNotification('To\u2019lov saqlandi', `${paymentForm.amount.toLocaleString()} UZS muvaffaqiyatli kiritildi.`);
+    } catch (e) {
+      console.error(e);
+      addNotification('Xatolik', 'To\u2019lov saqlashda xatolik yuz berdi.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveExpense = async () => {
+    if (expenseForm.amount <= 0 || !expenseForm.description.trim()) return;
+    setSaving(true);
+    try {
+      await createExpense({
+        category: expenseForm.category,
+        amount: expenseForm.amount,
+        description: expenseForm.description.trim(),
+        date: expenseForm.date,
+        createdBy: userData?.uid || '',
+        createdByName: userData?.name || '',
+      } as Omit<Expense, 'id'>);
+      setShowModal(null);
+      setExpenseForm({ category: 'other', amount: 0, description: '', date: new Date().toISOString().split('T')[0] });
+      addNotification('Xarajat saqlandi', `${expenseForm.amount.toLocaleString()} UZS muvaffaqiyatli kiritildi.`);
+    } catch (e) {
+      console.error(e);
+      addNotification('Xatolik', 'Xarajat saqlashda xatolik yuz berdi.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -100,12 +177,20 @@ export default function AdminFinance() {
             <Download className="h-4 w-4" /> Hisobot (Excel)
           </Button>
           <Button
+            variant="outline"
+            className="gap-2"
+            type="button"
+            onClick={() => setShowModal('expense')}
+          >
+            <TrendingDown className="h-4 w-4" /> Xarajat
+          </Button>
+          <Button
             variant="primary"
             className="gap-2"
             type="button"
-            onClick={() => notifyPlannedFeature('Yangi tranzaksiya', 'Qo‘lda tranzaksiya kiritish rejada.')}
+            onClick={() => setShowModal('payment')}
           >
-            <FileText className="h-4 w-4" /> Yangi tranzaksiya
+            <FileText className="h-4 w-4" /> Yangi to&apos;lov
           </Button>
         </div>
       </div>
@@ -124,13 +209,13 @@ export default function AdminFinance() {
         
         <Card>
           <div className="flex items-center justify-between mb-4">
-            <div className="text-slate-500 font-medium">Oylik tushum (to‘lovlar)</div>
+            <div className="text-slate-500 font-medium">Oylik tushum (to&apos;lovlar)</div>
             <div className="p-2 bg-emerald-50 rounded-lg">
               <TrendingUp className="h-5 w-5 text-emerald-600" />
             </div>
           </div>
           <div className="text-2xl font-bold text-slate-900 mb-2">{formatCurrency(monthlyRevenue)} UZS</div>
-          <div className="text-sm font-medium text-slate-500">Joriy oy: kirim yo‘nalishi</div>
+          <div className="text-sm font-medium text-slate-500">Joriy oy: kirim yo&apos;nalishi</div>
         </Card>
         
         <Card>
@@ -141,7 +226,7 @@ export default function AdminFinance() {
             </div>
           </div>
           <div className="text-2xl font-bold text-slate-900 mb-2">{formatCurrency(monthlyOutflow)} UZS</div>
-          <div className="text-sm font-medium text-slate-500">Chiqim to‘lovlari + xarajatlar</div>
+          <div className="text-sm font-medium text-slate-500">Chiqim to&apos;lovlari + xarajatlar</div>
         </Card>
       </div>
 
@@ -171,15 +256,7 @@ export default function AdminFinance() {
           {activeTab === 'transactions' ? (
             <>
               <div className="p-6 border-b border-emerald-200/60 flex justify-between items-center bg-white/60">
-                <h3 className="text-lg font-bold text-slate-900">So'nggi tranzaksiyalar</h3>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  type="button"
-                  onClick={() => notifyPlannedFeature('Barcha tranzaksiyalar')}
-                >
-                  Barchasi
-                </Button>
+                <h3 className="text-lg font-bold text-slate-900">So&apos;nggi tranzaksiyalar</h3>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
@@ -187,13 +264,13 @@ export default function AdminFinance() {
                     <tr className="bg-white/70 border-b border-emerald-200/60">
                       <th className="py-3 px-6 font-semibold text-slate-700 text-xs uppercase tracking-wider">Sana / ID</th>
                       <th className="py-3 px-6 font-semibold text-slate-700 text-xs uppercase tracking-wider">Manba / Maqsad</th>
-                      <th className="py-3 px-6 font-semibold text-slate-700 text-xs uppercase tracking-wider">To'lov turi</th>
+                      <th className="py-3 px-6 font-semibold text-slate-700 text-xs uppercase tracking-wider">To&apos;lov turi</th>
                       <th className="py-3 px-6 font-semibold text-slate-700 text-xs uppercase tracking-wider text-right">Summa</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800">
-                    {allTransactions.map((trx, i) => (
-                      <tr key={i} className="hover:bg-emerald-50 transition-colors">
+                    {allTransactions.map((trx) => (
+                      <tr key={trx.id} className="hover:bg-emerald-50 transition-colors">
                         <td className="py-4 px-6">
                           <div className="font-medium text-slate-900">{trx.date}</div>
                           <div className="text-xs text-slate-400">{trx.id}</div>
@@ -211,6 +288,13 @@ export default function AdminFinance() {
                         </td>
                       </tr>
                     ))}
+                    {allTransactions.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="py-8 text-center text-slate-400">
+                          Tranzaksiyalar yo&apos;q
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -219,28 +303,20 @@ export default function AdminFinance() {
             <>
               <div className="p-6 border-b border-emerald-200/60 flex justify-between items-center bg-white/60">
                 <h3 className="text-lg font-bold text-slate-900">Mijozlar bilan solishtirma dalolatnoma</h3>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  type="button"
-                  onClick={() => notifyPlannedFeature('Akt sverka', 'Barcha mijozlar bo‘yicha kengaytirilgan dalolatnoma rejada.')}
-                >
-                  Barchasi
-                </Button>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-white/70 border-b border-emerald-200/60">
-                      <th className="py-3 px-6 font-semibold text-slate-700 text-xs uppercase tracking-wider">Mijoz (Do'kon)</th>
+                      <th className="py-3 px-6 font-semibold text-slate-700 text-xs uppercase tracking-wider">Mijoz (Do&apos;kon)</th>
                       <th className="py-3 px-6 font-semibold text-slate-700 text-xs uppercase tracking-wider">Qarzdorlik</th>
-                      <th className="py-3 px-6 font-semibold text-slate-700 text-xs uppercase tracking-wider">So'nggi to'lov</th>
+                      <th className="py-3 px-6 font-semibold text-slate-700 text-xs uppercase tracking-wider">So&apos;nggi to&apos;lov</th>
                       <th className="py-3 px-6 font-semibold text-slate-700 text-xs uppercase tracking-wider text-right">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800">
-                    {debtors.map((client, i) => (
-                      <tr key={i} className="hover:bg-emerald-50 transition-colors">
+                    {debtors.map((client) => (
+                      <tr key={client.id} className="hover:bg-emerald-50 transition-colors">
                         <td className="py-4 px-6 font-medium text-slate-900">{client.name}</td>
                         <td className={`py-4 px-6 font-bold ${client.currentBalance > 0 ? 'text-red-200' : 'text-emerald-300'}`}>
                           {formatCurrency(client.currentBalance)} UZS
@@ -262,8 +338,7 @@ export default function AdminFinance() {
           ) : (
             <>
               <div className="p-6 border-b border-emerald-200/60 bg-white/60">
-                <h3 className="text-lg font-bold text-slate-900">Operatsion xarajatlar (Firestore)</h3>
-                <p className="text-sm text-slate-500 mt-1">Buxgalteriya modulidagi xarajat yozuvlari bilan sinxron.</p>
+                <h3 className="text-lg font-bold text-slate-900">Operatsion xarajatlar</h3>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
@@ -293,7 +368,7 @@ export default function AdminFinance() {
                     {expenses.length === 0 && (
                       <tr>
                         <td colSpan={4} className="py-8 text-center text-slate-400">
-                          Xarajat yozuvlari yo‘q
+                          Xarajat yozuvlari yo&apos;q
                         </td>
                       </tr>
                     )}
@@ -315,15 +390,10 @@ export default function AdminFinance() {
                   <div className="h-10 w-10 bg-emerald-50 rounded-lg flex items-center justify-center font-bold text-emerald-600">1C</div>
                   <div>
                     <div className="font-medium text-slate-900">1C: Buxgalteriya</div>
-                    <div className="text-xs text-emerald-600 font-medium">Ulangan (Sinxron)</div>
+                    <div className="text-xs text-slate-500">Ulanmagan</div>
                   </div>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  type="button"
-                  onClick={() => notifyPlannedFeature('1C integratsiya')}
-                >
+                <Button variant="ghost" size="sm" type="button" onClick={() => notifyPlannedFeature('1C integratsiya')}>
                   Sozlash
                 </Button>
               </div>
@@ -333,15 +403,10 @@ export default function AdminFinance() {
                   <div className="h-10 w-10 bg-emerald-50 rounded-lg flex items-center justify-center font-bold text-emerald-600">DX</div>
                   <div>
                     <div className="font-medium text-slate-900">Didox (EHF)</div>
-                    <div className="text-xs text-emerald-600 font-medium">Ulangan</div>
+                    <div className="text-xs text-slate-500">Ulanmagan</div>
                   </div>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  type="button"
-                  onClick={() => notifyPlannedFeature('Didox integratsiya')}
-                >
+                <Button variant="ghost" size="sm" type="button" onClick={() => notifyPlannedFeature('Didox integratsiya')}>
                   Sozlash
                 </Button>
               </div>
@@ -354,12 +419,7 @@ export default function AdminFinance() {
                     <div className="text-xs text-slate-500">Ulanmagan</div>
                   </div>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  type="button"
-                  onClick={() => notifyPlannedFeature('E-Aktiv ulanish')}
-                >
+                <Button variant="outline" size="sm" type="button" onClick={() => notifyPlannedFeature('E-Aktiv ulanish')}>
                   Ulash
                 </Button>
               </div>
@@ -382,6 +442,120 @@ export default function AdminFinance() {
           </Card>
         </div>
       </div>
+
+      {/* Payment Modal */}
+      <Modal isOpen={showModal === 'payment'} onClose={() => !saving && setShowModal(null)} title="Yangi to&apos;lov" size="md">
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Yo&apos;nalish</label>
+              <select
+                className="block w-full rounded-full border-emerald-200/60 bg-white/75 py-2.5 pl-3 pr-10 text-slate-900 border text-sm"
+                value={paymentForm.direction}
+                onChange={(e) => setPaymentForm(f => ({ ...f, direction: e.target.value as 'in' | 'out' }))}
+              >
+                <option value="in">Kirim (mijozdan)</option>
+                <option value="out">Chiqim</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">To&apos;lov turi</label>
+              <select
+                className="block w-full rounded-full border-emerald-200/60 bg-white/75 py-2.5 pl-3 pr-10 text-slate-900 border text-sm"
+                value={paymentForm.type}
+                onChange={(e) => setPaymentForm(f => ({ ...f, type: e.target.value as Payment['type'] }))}
+              >
+                <option value="cash">Naqd</option>
+                <option value="card">Karta</option>
+                <option value="transfer">Pul o&apos;tkazma</option>
+                <option value="click">Click</option>
+                <option value="payme">Payme</option>
+                <option value="uzum">Uzum</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Summa (UZS) *</label>
+            <Input
+              type="number"
+              min="0"
+              value={paymentForm.amount || ''}
+              onChange={(e) => setPaymentForm(f => ({ ...f, amount: Number(e.target.value) || 0 }))}
+            />
+          </div>
+          <Input
+            placeholder="Mijoz nomi"
+            value={paymentForm.clientName}
+            onChange={(e) => setPaymentForm(f => ({ ...f, clientName: e.target.value }))}
+          />
+          <Input
+            placeholder="Tavsif / Izoh"
+            value={paymentForm.description}
+            onChange={(e) => setPaymentForm(f => ({ ...f, description: e.target.value }))}
+          />
+          <div className="flex justify-end gap-3 pt-2">
+            <Button type="button" variant="outline" onClick={() => setShowModal(null)} disabled={saving}>
+              Bekor qilish
+            </Button>
+            <Button type="button" variant="primary" onClick={handleSavePayment} disabled={saving || paymentForm.amount <= 0}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Saqlash
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Expense Modal */}
+      <Modal isOpen={showModal === 'expense'} onClose={() => !saving && setShowModal(null)} title="Yangi xarajat" size="md">
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Kategoriya</label>
+              <select
+                className="block w-full rounded-full border-emerald-200/60 bg-white/75 py-2.5 pl-3 pr-10 text-slate-900 border text-sm"
+                value={expenseForm.category}
+                onChange={(e) => setExpenseForm(f => ({ ...f, category: e.target.value as ExpenseCategory }))}
+              >
+                {EXPENSE_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Sana</label>
+              <Input
+                type="date"
+                value={expenseForm.date}
+                onChange={(e) => setExpenseForm(f => ({ ...f, date: e.target.value }))}
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Summa (UZS) *</label>
+            <Input
+              type="number"
+              min="0"
+              value={expenseForm.amount || ''}
+              onChange={(e) => setExpenseForm(f => ({ ...f, amount: Number(e.target.value) || 0 }))}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Tavsif *</label>
+            <Input
+              placeholder="Xarajat tavsifi"
+              value={expenseForm.description}
+              onChange={(e) => setExpenseForm(f => ({ ...f, description: e.target.value }))}
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button type="button" variant="outline" onClick={() => setShowModal(null)} disabled={saving}>
+              Bekor qilish
+            </Button>
+            <Button type="button" variant="primary" onClick={handleSaveExpense} disabled={saving || expenseForm.amount <= 0 || !expenseForm.description.trim()}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Saqlash
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
