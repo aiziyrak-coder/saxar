@@ -13,6 +13,7 @@ const ADMIN_COMMANDS: CommandItem[] = [
   { id: 'd', label: 'Dashboard', path: roleSubPath('admin', 'dashboard'), keywords: 'bosh' },
   { id: 'o', label: 'Buyurtmalar', path: roleSubPath('admin', 'orders') },
   { id: 'c', label: 'Mijozlar', path: roleSubPath('admin', 'clients') },
+  { id: 'P', label: 'Mahsulotlar', path: roleSubPath('admin', 'products'), keywords: 'katalog narx' },
   { id: 'w', label: 'Ombor WMS', path: roleSubPath('admin', 'wms') },
   { id: 'f', label: 'Moliya', path: roleSubPath('admin', 'finance') },
   { id: 'r', label: 'Hisobotlar', path: roleSubPath('admin', 'reports') },
@@ -29,16 +30,26 @@ const ADMIN_COMMANDS: CommandItem[] = [
   { id: 'x', label: 'Platform vositalari (20+)', path: roleSubPath('admin', 'workspace'), keywords: 'funksiya' },
 ];
 
-const IDLE_MS = (() => {
+import { platformPublicApi } from '../../services/platformApi';
+
+function idleMsFromMinutes(minutes: number): number {
+  if (Number.isFinite(minutes) && minutes >= 5) return minutes * 60 * 1000;
   const raw = Number(import.meta.env.VITE_IDLE_WARN_MS);
   if (Number.isFinite(raw) && raw >= 60_000) return raw;
   return 25 * 60 * 1000;
-})();
+}
 
 export function PlatformGlobal() {
   const location = useLocation();
   const online = useOnlineStatus();
-  const { showWarning, continueSession } = useIdleSession({ warnAfterMs: IDLE_MS });
+  const [idleMs, setIdleMs] = useState(() => idleMsFromMinutes(30));
+  const { showWarning, continueSession } = useIdleSession({ warnAfterMs: idleMs });
+
+  useEffect(() => {
+    platformPublicApi.getPublic().then((p) => {
+      setIdleMs(idleMsFromMinutes(p.session_idle_minutes));
+    }).catch(() => {});
+  }, []);
   const [cmdOpen, setCmdOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
 

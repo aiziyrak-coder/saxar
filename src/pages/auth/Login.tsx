@@ -17,6 +17,8 @@ import { DEV_ROLE_ORDER, DEV_ROLE_PHONE_CREDENTIALS } from '../../constants/devR
 import { logger } from '../../services/logger';
 import type { UserRole } from '../../types';
 import { parseUserRole, ROLE_HOME_PATHS } from '../../constants/roles';
+import { obtainDjangoJwt, roleRequiresDjangoJwt } from '../../services/djangoAuth';
+import { signOut } from 'firebase/auth';
 
 const FIXED_PASSWORD = 'SaxarERP123!';
 
@@ -64,7 +66,7 @@ export default function Login() {
             phone,
             role: 'b2b',
             name: 'Demo B2B Client',
-            status: 'active',
+            status: 'pending',
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           })
@@ -86,6 +88,18 @@ export default function Login() {
         const userDocRef = doc(db, 'users', currentUser.uid);
         const userDoc = await getDoc(userDocRef);
         const role = parseUserRole(userDoc.exists() ? userDoc.data().role : undefined);
+        if (roleRequiresDjangoJwt(role)) {
+          const jwt = await obtainDjangoJwt(phone.trim(), pwd);
+          if (!jwt) {
+            await signOut(auth);
+            setError(
+              'Server API bilan bog‘lanishda xatolik. Django foydalanuvchi va parol to‘g‘riligini tekshiring.'
+            );
+            return;
+          }
+        } else if (role === 'b2b') {
+          await obtainDjangoJwt(phone.trim(), pwd);
+        }
         navigate(ROLE_HOME_PATHS[role]);
       }
     } catch (err) {
@@ -111,7 +125,7 @@ export default function Login() {
             phone,
             role: 'b2b',
             name: 'Demo B2B Client',
-            status: 'active',
+            status: 'pending',
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           })
@@ -183,6 +197,12 @@ export default function Login() {
 
       const data = userDoc.exists() ? userDoc.data() : { role };
       const effectiveRole = parseUserRole(data.role ?? role);
+      const jwt = await obtainDjangoJwt(creds.phone, creds.password);
+      if (roleRequiresDjangoJwt(effectiveRole) && !jwt) {
+        await signOut(auth);
+        setError('Server API bilan bog‘lanishda xatolik. Django parolini tekshiring.');
+        return;
+      }
       navigate(ROLE_HOME_PATHS[effectiveRole]);
     } catch (err) {
       const fbErr = err as { message?: string; code?: string };

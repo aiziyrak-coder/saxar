@@ -4,12 +4,8 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Package, Clock, CheckCircle2, Truck, ChevronRight, Loader2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { orderApi } from '../../services/api';
-import { getOrdersByClient } from '../../services/firestore';
-import { mapApiOrderRowToOrder } from '../../services/b2bFromApi';
-import { logger } from '../../services/logger';
-import { notifyPlannedFeature } from '../../platform/notifications';
-import type { Order } from '../../types';
+import { fetchClientOrdersMerged } from '../../utils/mergedData';
+import type { Order, User } from '../../types';
 
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Qabul qilindi',
@@ -22,21 +18,21 @@ const STATUS_LABELS: Record<string, string> = {
   returned: 'Qaytarildi',
 };
 
-async function loadOrdersForClient(uid: string): Promise<Order[]> {
-  try {
-    const rows = await orderApi.getAll();
-    const mine = rows.filter((r) => String(r.client) === uid);
-    return mine.map(mapApiOrderRowToOrder);
-  } catch (e) {
-    logger.warn('B2B buyurtmalar: API xato, Firestore fallback', { detail: String(e) });
-    return getOrdersByClient(uid, 100);
-  }
+async function loadOrdersForClient(userData: User | null): Promise<Order[]> {
+  const uid = userData?.uid;
+  if (!uid) return [];
+  return fetchClientOrdersMerged(uid, userData?.djangoUserId);
 }
 
 export default function B2BOrders() {
-  const { user } = useAuth();
+  const { user, userData } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
+  const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(true);
+
+  const visibleOrders = statusFilter
+    ? orders.filter((o) => o.status === statusFilter)
+    : orders;
 
   useEffect(() => {
     if (!user?.uid) {
@@ -47,7 +43,7 @@ export default function B2BOrders() {
     let cancelled = false;
     (async () => {
       try {
-        const list = await loadOrdersForClient(user.uid);
+        const list = await loadOrdersForClient(userData);
         if (!cancelled) setOrders(list);
       } catch {
         if (!cancelled) setOrders([]);
@@ -58,7 +54,7 @@ export default function B2BOrders() {
     return () => {
       cancelled = true;
     };
-  }, [user?.uid]);
+  }, [user?.uid, userData?.uid, userData?.djangoUserId]);
 
   const formatDate = (d: string) => new Date(d).toLocaleDateString('uz-UZ', { day: '2-digit', month: 'short', year: 'numeric' });
   const formatPrice = (n: number) => new Intl.NumberFormat('uz-UZ').format(n);
@@ -78,13 +74,13 @@ export default function B2BOrders() {
         <Button
           variant="outline"
           type="button"
-          onClick={() => notifyPlannedFeature('Buyurtmalar filtri')}
+          onClick={() => { const s = window.prompt('Holat bo‘yicha qidiruv (masalan: pending):', ''); if (s) setStatusFilter(s); }}
         >
           Filtr
         </Button>
       </div>
 
-      {orders.length === 0 ? (
+      {visibleOrders.length === 0 ? (
         <Card className="py-10 sm:py-16 text-center">
           <Package className="h-16 w-16 text-slate-300 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-slate-900 mb-2">Buyurtmalar yo&apos;q</h3>
@@ -98,7 +94,7 @@ export default function B2BOrders() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-4">
-          {orders.map((order) => (
+          {visibleOrders.map((order) => (
             <Card key={order.id} className="flex flex-col sm:flex-row items-center justify-between p-6 hover:shadow-md transition-shadow">
               <div className="flex items-center gap-6">
                 <div className="h-12 w-12 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">

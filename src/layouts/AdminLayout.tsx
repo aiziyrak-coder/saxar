@@ -18,6 +18,7 @@ import {
   Search,
   Sparkles,
   LayoutTemplate,
+  Boxes,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -32,6 +33,7 @@ const ADMIN_NAV: { path: string; icon: typeof LayoutDashboard; label: string }[]
   { path: roleSubPath('admin', 'production'), icon: Package, label: 'Ishlab chiqarish' },
   { path: roleSubPath('admin', 'orders'), icon: ShoppingCart, label: 'Buyurtmalar' },
   { path: roleSubPath('admin', 'clients'), icon: Users, label: 'Mijozlar' },
+  { path: roleSubPath('admin', 'products'), icon: Boxes, label: 'Mahsulotlar' },
   { path: roleSubPath('admin', 'wms'), icon: Package, label: 'Ombor (WMS)' },
   { path: roleSubPath('admin', 'agents'), icon: Users, label: 'Agentlar' },
   { path: roleSubPath('admin', 'logistics'), icon: Truck, label: 'Logistika' },

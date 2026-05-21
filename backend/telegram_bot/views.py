@@ -2,16 +2,11 @@ from rest_framework import permissions, serializers, status, views
 from rest_framework.response import Response
 
 from accounts.models import User
+from accounts.permissions import IsAdminRole
 
 from .linking import make_start_link_arg
 from .models import TelegramSettings
 from . import services
-
-
-class IsAdminRole(permissions.BasePermission):
-    def has_permission(self, request, view) -> bool:
-        u = request.user
-        return bool(u and u.is_authenticated and getattr(u, "role", None) == "admin")
 
 
 class TelegramSettingsSerializer(serializers.ModelSerializer):

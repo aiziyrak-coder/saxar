@@ -8,6 +8,7 @@ import { getFirebaseAuth, tryGetFirebaseDb, isFirebaseConfigured } from '../../f
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { persistDemoUser } from '../../constants/branding';
+import { api, ApiError } from '../../services/api';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -17,9 +18,9 @@ export default function Register() {
     phone: '',
     inn: '',
     companyName: '',
+    password: '',
+    passwordConfirm: '',
   });
-
-  const FIXED_PASSWORD = 'SaxarERP123!';
   const makeSyntheticEmail = (phone: string) => {
     const digits = phone.replace(/\D/g, '').trim();
     if (!digits) throw new Error('Telefon raqam kiritilmagan');
@@ -44,6 +45,15 @@ export default function Register() {
       setError("Telefon raqam 9 dan 12 gacha raqamdan iborat bo'lishi kerak");
       return;
     }
+    const pwd = formData.password.trim();
+    if (pwd.length < 6) {
+      setError("Parol kamida 6 belgidan iborat bo'lishi kerak");
+      return;
+    }
+    if (pwd !== formData.passwordConfirm.trim()) {
+      setError('Parollar mos kelmaydi');
+      return;
+    }
 
     setLoading(true);
     setError('');
@@ -57,18 +67,36 @@ export default function Register() {
             phone: formData.phone.trim(),
             role: 'b2b',
             name: formData.companyName,
-            status: 'active',
+            status: 'pending',
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           })
         );
-        window.location.href = '/b2b';
+        window.location.href = '/b2b/profile';
         return;
       }
 
       const syntheticEmail = makeSyntheticEmail(formData.phone);
+      let djangoUserId: number | undefined;
+      try {
+        const dj = await api.post<{ id: number }>('/accounts/auth/register-b2b/', {
+          email: syntheticEmail,
+          password: pwd,
+          phone: formData.phone.trim(),
+          stir: stirDigits,
+          company_name: companyName,
+        });
+        djangoUserId = dj.id;
+        // JWT faqat admin tasdiqlagach (is_active=True) — hozir login rad etiladi
+      } catch (apiErr) {
+        if (!(apiErr instanceof ApiError && apiErr.statusCode === 400)) {
+          throw apiErr;
+        }
+        setError(apiErr.message || 'Bu telefon/email allaqachon ro‘yxatdan o‘tgan');
+        return;
+      }
       const auth = getFirebaseAuth();
-      const result = await createUserWithEmailAndPassword(auth, syntheticEmail, FIXED_PASSWORD);
+      const result = await createUserWithEmailAndPassword(auth, syntheticEmail, pwd);
       await updateProfile(result.user, { displayName: companyName });
       const uid = result.user.uid;
       const now = new Date().toISOString();
@@ -79,6 +107,7 @@ export default function Register() {
       }
       await setDoc(doc(db, 'users', uid), {
         uid,
+        djangoUserId: djangoUserId ?? null,
         email: syntheticEmail,
         phone: formData.phone.trim(),
         role: 'b2b',
@@ -110,7 +139,7 @@ export default function Register() {
         createdAt: now,
         updatedAt: now,
       });
-      navigate('/b2b');
+      navigate('/b2b/profile', { state: { pendingApproval: true } });
     } catch (err) {
       const fbErr = err as { message?: string; code?: string };
       const msg = String(fbErr?.message || '');
@@ -131,12 +160,12 @@ export default function Register() {
             phone: formData.phone,
             role: 'b2b',
             name: formData.companyName,
-            status: 'active',
+            status: 'pending',
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           })
         );
-        window.location.href = '/b2b';
+        window.location.href = '/b2b/profile';
         return;
       }
 
@@ -255,10 +284,29 @@ export default function Register() {
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                 />
               </div>
-              <p className="mt-1.5 text-xs text-zinc-600 leading-relaxed dark:text-zinc-600">
-                SMS orqali tasdiqlash yo‘q — raqam faqat kirish identifikatori sifatida ishlatiladi. Parol tizim
-                tomonidan belgilanadi (demo rejimda avtomatik).
-              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-zinc-900">Parol</label>
+              <Input
+                type="password"
+                required
+                minLength={6}
+                className="mt-1.5"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-zinc-900">Parolni tasdiqlang</label>
+              <Input
+                type="password"
+                required
+                minLength={6}
+                className="mt-1.5"
+                value={formData.passwordConfirm}
+                onChange={(e) => setFormData({ ...formData, passwordConfirm: e.target.value })}
+              />
             </div>
 
             <Button type="submit" variant="primary" className="w-full justify-center py-2.5 font-semibold" disabled={loading}>

@@ -5,7 +5,7 @@ import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
 import { Factory, Plus, CheckCircle2, Package, Settings, BarChart3, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { addNotification, notifyPlannedFeature } from '../../platform/notifications';
+import { addNotification } from '../../platform/notifications';
 import { useFirestore } from '../../hooks/useFirestore';
 import { useAuth } from '../../context/AuthContext';
 import type { Product } from '../../types';
@@ -206,8 +206,8 @@ export default function ProductionDashboard() {
               className="flex flex-col items-center justify-center p-6 text-center hover:bg-slate-50 cursor-pointer transition-colors border-dashed border-2"
               role="button"
               tabIndex={0}
-              onClick={() => notifyPlannedFeature('Retseptura (texkarta)')}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); notifyPlannedFeature('Retseptura (texkarta)'); } }}
+              onClick={() => addNotification('Retseptura', 'Admin → Ishlab chiqarish bo‘limida partiyalar va normalar.')}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addNotification('Retseptura', 'Texkarta ma’lumotlari partiya kartochkasida.'); } }}
             >
               <div className="h-12 w-12 bg-emerald-50 rounded-full flex items-center justify-center mb-3">
                 <Settings className="h-6 w-6 text-emerald-600" />
@@ -247,7 +247,7 @@ export default function ProductionDashboard() {
           <Card className="bg-white/70 text-slate-900 border border-emerald-200/60">
             <h3 className="font-bold mb-2">Kunlik hisobot</h3>
             <p className="text-sm text-slate-400 mb-4">Bugungi ishlab chiqarilgan mahsulotlar hisoboti.</p>
-            <Button variant="primary" className="w-full bg-emerald-500 hover:bg-emerald-600 border-none" type="button" onClick={() => notifyPlannedFeature('Kunlik ishlab chiqarish hisoboti')}>
+            <Button variant="primary" className="w-full bg-emerald-500 hover:bg-emerald-600 border-none" type="button" onClick={() => addNotification('Hisobot', 'Kunlik ishlab chiqarish — Admin → Hisobotlar bo‘limida P&L.')}>
               Hisobotni yuklash
             </Button>
           </Card>

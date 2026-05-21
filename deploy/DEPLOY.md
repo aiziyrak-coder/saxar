@@ -266,6 +266,25 @@ Skript `deploy/remote_bootstrap.sh` ni serverga yuklab, `/opt/saxar` da `git pul
 
 **Bitta domen (`saxar.uz` orqali `/api`)** ishlatilsa, DNS talab qilinmaydi; `VITE_PUBLIC_API_URL=/api` qoldiring.
 
-## 10) Firebase (kirish xatolari `YOUR_WEB_API_KEY`)
+## 10) Deploy dan keyin audit
+
+**Mahalliy:**
+
+```powershell
+.\deploy\validate_local.ps1
+```
+
+**Server (SSH parol/kalit — `deploy_remote.py` bilan bir xil):**
+
+```powershell
+$env:SAXAR_SSH_PASSWORD = "PAROL"
+python deploy/audit_production.py
+```
+
+`remote_bootstrap.sh` oxirida `deploy/post_deploy_verify.sh` avtomatik ishlaydi (nginx, `:18180` SPA, `:18181` health, `https://saxar.uz/admin/workspace`).
+
+**400 `/admin/workspace`:** so‘rov Django API ga tushmasligi kerak — host nginx `location /` → `:18180`. `.env.saxar` da `DJANGO_ALLOWED_HOSTS` ichida `saxar.uz` bo‘lsin. `api.saxar.uz` uchun alohida cert bo‘lmasa — `api.saxar.uz.shared-with-saxar-cert.conf` (bootstrap avtomatik tanlaydi).
+
+## 11) Firebase (kirish xatolari `YOUR_WEB_API_KEY`)
 
 Repoda maxfiy kalit yo‘q. Serverda `/opt/saxar/firebase-applet-config.json` faylini Firebase konsoldan olingan haqiqiy JSON bilan yarating (`.gitignore` da), keyin `docker compose ... up -d --build web` — Dockerfile bu fayl bor bo‘lsa, misol konfigni **nusxalamaydi**.

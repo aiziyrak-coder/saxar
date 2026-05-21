@@ -4,14 +4,17 @@ import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { ArrowUpFromLine, Truck, Package, Loader2, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { useFirestore } from '../../hooks/useFirestore';
+import { useCatalogProducts } from '../../hooks/useCatalogProducts';
 import {
-  getOrdersByStatuses,
+  checkFifoAvailability,
   deductFIFO,
   orderService,
 } from '../../services/firestore';
+import { orderApi } from '../../services/api';
+import { hasDjangoJwt } from '../../services/djangoAuth';
+import { loadWarehouseShipmentOrders } from '../../utils/loadWarehouseOrders';
 import { logAudit, AuditActions, EntityTypes } from '../../services/audit';
-import type { Order, OrderItem, Product } from '../../types';
+import type { Order, OrderItem } from '../../types';
 
 export default function WarehouseShipment() {
   const { user, userData } = useAuth();
@@ -20,14 +23,14 @@ export default function WarehouseShipment() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { data: products } = useFirestore<Product>('products');
+  const { data: products } = useCatalogProducts();
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
       try {
-        const list = await getOrdersByStatuses(['confirmed', 'picking', 'packed']);
+        const list = await loadWarehouseShipmentOrders();
         if (!cancelled) setOrders(list);
       } catch (e) {
         if (!cancelled) setError('Buyurtmalar yuklanmadi');
@@ -44,6 +47,16 @@ export default function WarehouseShipment() {
     setSubmitting(true);
     try {
       const items = (selectedOrder.items || []) as OrderItem[];
+      for (const line of items) {
+        const product = products.find(p => p.id === line.productId);
+        const name = product?.name || line.productName || '';
+        const unit = product?.unit || line.unit || 'dona';
+        const ok = await checkFifoAvailability(line.productId, line.quantity);
+        if (!ok) {
+          setError(`${name}: omborda yetarli emas (${line.quantity} ${unit})`);
+          return;
+        }
+      }
       for (const line of items) {
         const product = products.find(p => p.id === line.productId);
         const name = product?.name || line.productName || '';
@@ -65,16 +78,19 @@ export default function WarehouseShipment() {
           return;
         }
       }
+      const newStatus = 'packed';
+      if (hasDjangoJwt() && /^\d+$/.test(String(selectedOrder.id))) {
+        await orderApi.update(String(selectedOrder.id), { status: newStatus });
+      }
       await orderService.update(selectedOrder.id, {
-        status: 'packed',
+        status: newStatus,
         updatedAt: new Date().toISOString(),
       });
       if (userData) {
-        await logAudit(AuditActions.ORDER_STATUS_CHANGE, EntityTypes.ORDER, selectedOrder.id, user.uid, userData.name || '', userData.role, { status: selectedOrder.status }, { status: 'packed' });
+        await logAudit(AuditActions.ORDER_STATUS_CHANGE, EntityTypes.ORDER, selectedOrder.id, user.uid, userData.name || '', userData.role, { status: selectedOrder.status }, { status: newStatus });
       }
       setSelectedOrder(null);
-      const list = await getOrdersByStatuses(['confirmed', 'picking', 'packed']);
-      setOrders(list);
+      setOrders(await loadWarehouseShipmentOrders());
     } catch (e) {
       console.error(e);
       setError('Chiqim bajarishda xatolik');

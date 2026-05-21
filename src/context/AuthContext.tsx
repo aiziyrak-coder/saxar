@@ -13,12 +13,13 @@ import type { User, UserRole } from '../types';
 import { clearDemoUserStorage, readDemoUserRaw } from '../constants/branding';
 import { parseUserRole } from '../constants/roles';
 import { clearApiSession, clearStoredAuthTokens } from '../services/api';
+import { fetchDjangoMe, hasDjangoJwt } from '../services/djangoAuth';
 
 function parseUserStatus(value: unknown): User['status'] {
   if (value === 'active' || value === 'inactive' || value === 'pending') {
     return value;
   }
-  return 'active';
+  return 'pending';
 }
 
 interface SessionUser {
@@ -95,6 +96,12 @@ function firestoreProfileToUser(firebaseUser: FirebaseUser, snapData: Record<str
     vehicleNumber: snapData.vehicleNumber as string | undefined,
     stir: snapData.stir as string | undefined,
     companyName: snapData.companyName as string | undefined,
+    djangoUserId:
+      typeof snapData.djangoUserId === 'number'
+        ? snapData.djangoUserId
+        : snapData.djangoUserId
+          ? Number(snapData.djangoUserId)
+          : undefined,
     address: snapData.address as string | undefined,
     location: snapData.location as User['location'],
   };
@@ -109,7 +116,7 @@ function minimalUserFromAuth(firebaseUser: FirebaseUser): User {
     phone: firebaseUser.phoneNumber || '',
     role: 'b2b',
     name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Foydalanuvchi',
-    status: 'active',
+    status: 'pending',
     createdAt: now,
     updatedAt: now,
   };
@@ -120,12 +127,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [userData, setUserData] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const applyUserSession = useCallback((nextUserData: User) => {
-    setUserData(nextUserData);
+  const applyUserSession = useCallback(async (nextUserData: User) => {
+    let merged = nextUserData;
+    if (hasDjangoJwt()) {
+      const me = await fetchDjangoMe();
+      if (me) {
+        merged = {
+          ...nextUserData,
+          djangoUserId: me.id,
+          status: me.is_active
+            ? nextUserData.status === 'inactive'
+              ? 'inactive'
+              : nextUserData.status
+            : 'inactive',
+        };
+      }
+    }
+    setUserData(merged);
     setUser({
-      uid: nextUserData.uid,
-      email: nextUserData.email,
-      displayName: nextUserData.name,
+      uid: merged.uid,
+      email: merged.email,
+      displayName: merged.name,
     });
   }, []);
 
@@ -138,7 +160,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!isFirebaseConfigured()) {
       const demoUser = readDemoUserFromStorage();
       if (demoUser) {
-        applyUserSession(demoUser);
+        void applyUserSession(demoUser);
       } else {
         clearSession();
       }
@@ -153,19 +175,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           const db = tryGetFirebaseDb();
           if (!db) {
-            applyUserSession(minimalUserFromAuth(firebaseUser));
+            void applyUserSession(minimalUserFromAuth(firebaseUser));
           } else {
             const userDocRef = doc(db, 'users', firebaseUser.uid);
             const userDoc = await getDoc(userDocRef);
             if (userDoc.exists()) {
               const data = userDoc.data() as Record<string, unknown>;
-              applyUserSession(firestoreProfileToUser(firebaseUser, data, userDoc.id));
+              void applyUserSession(firestoreProfileToUser(firebaseUser, data, userDoc.id));
             } else {
-              applyUserSession(minimalUserFromAuth(firebaseUser));
+              void applyUserSession(minimalUserFromAuth(firebaseUser));
             }
           }
         } catch {
-          applyUserSession(minimalUserFromAuth(firebaseUser));
+          void applyUserSession(minimalUserFromAuth(firebaseUser));
         }
         setLoading(false);
         return;
@@ -173,7 +195,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const demoUser = readDemoUserFromStorage();
       if (demoUser) {
-        applyUserSession(demoUser);
+        void applyUserSession(demoUser);
       } else {
         clearSession();
       }

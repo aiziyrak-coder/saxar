@@ -28,7 +28,7 @@ RUN python manage.py collectstatic --noinput
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health/', timeout=5).read()"
+    CMD python -c "import urllib.request; r=urllib.request.Request('http://127.0.0.1:8000/api/health/'); urllib.request.urlopen(r, timeout=5).read()"
 
 # Migratsiya + Gunicorn (Docker / prod)
 CMD ["sh", "-c", "python manage.py migrate --noinput && exec gunicorn core.wsgi:application --bind 0.0.0.0:8000 --workers 4 --threads 2 --timeout 120 --access-logfile - --error-logfile -"]

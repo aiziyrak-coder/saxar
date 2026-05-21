@@ -110,6 +110,30 @@ export function clearApiSession(): void {
 
 interface ApiConfig extends RequestInit {
   params?: Record<string, string>;
+  /** Ichki: 401 dan keyin refresh urinishi */
+  _retry401?: boolean;
+}
+
+async function refreshAccessToken(baseUrl: string): Promise<boolean> {
+  const refresh = localStorage.getItem('auth_refresh_token');
+  if (!refresh) return false;
+  try {
+    let url = buildApiFetchUrl(baseUrl, '/accounts/auth/refresh/');
+    url = coerceBrowserFetchUrl(url);
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh }),
+    });
+    if (!res.ok) return false;
+    const data = (await res.json()) as { access?: string; refresh?: string };
+    if (!data.access) return false;
+    localStorage.setItem('auth_token', data.access);
+    if (data.refresh) localStorage.setItem('auth_refresh_token', data.refresh);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 class ApiService {
@@ -120,7 +144,7 @@ class ApiService {
   }
 
   private async request<T>(endpoint: string, config: ApiConfig = {}): Promise<T> {
-    const { params, ...fetchConfig } = config;
+    const { params, _retry401, ...fetchConfig } = config;
 
     let url = buildApiFetchUrl(this.baseUrl, endpoint, params);
     url = coerceBrowserFetchUrl(url);
@@ -157,7 +181,12 @@ class ApiService {
       logger.trackApiCall(endpoint, fetchConfig.method || 'GET', duration, response.status);
 
       if (response.status === 401) {
-        clearApiSession();
+        if (token && !_retry401 && (await refreshAccessToken(this.baseUrl))) {
+          return this.request<T>(endpoint, { ...config, _retry401: true });
+        }
+        if (token) {
+          clearApiSession();
+        }
       }
 
       if (!response.ok) {
@@ -240,28 +269,28 @@ export const api = new ApiService();
 // ==================== ENTITY SERVICES ====================
 
 export const categoryApi = {
-  getAll: () => api.get<Category[]>('/categories/'),
-  getById: (id: string) => api.get<Category>(`/categories/${id}/`),
-  create: (data: Partial<Category>) => api.post<Category>('/categories/', data),
-  update: (id: string, data: Partial<Category>) => api.patch<Category>(`/categories/${id}/`, data),
+  getAll: () => api.get<ApiCategory[]>('/categories/'),
+  getById: (id: string) => api.get<ApiCategory>(`/categories/${id}/`),
+  create: (data: Record<string, unknown>) => api.post<ApiCategory>('/categories/', data),
+  update: (id: string, data: Record<string, unknown>) => api.patch<ApiCategory>(`/categories/${id}/`, data),
   delete: (id: string) => api.delete<void>(`/categories/${id}/`),
 };
 
 export const brandApi = {
-  getAll: () => api.get<Brand[]>('/brands/'),
-  getById: (id: string) => api.get<Brand>(`/brands/${id}/`),
-  create: (data: Partial<Brand>) => api.post<Brand>('/brands/', data),
-  update: (id: string, data: Partial<Brand>) => api.patch<Brand>(`/brands/${id}/`, data),
+  getAll: () => api.get<ApiBrand[]>('/brands/'),
+  getById: (id: string) => api.get<ApiBrand>(`/brands/${id}/`),
+  create: (data: Record<string, unknown>) => api.post<ApiBrand>('/brands/', data),
+  update: (id: string, data: Record<string, unknown>) => api.patch<ApiBrand>(`/brands/${id}/`, data),
   delete: (id: string) => api.delete<void>(`/brands/${id}/`),
 };
 
 export const productApi = {
   getAll: (params?: { category?: string; brand?: string; search?: string; is_b2b?: string }) =>
-    api.get<Product[]>('/products/', params),
-  getById: (id: string) => api.get<Product>(`/products/${id}/`),
-  getB2BCatalog: () => api.get<Product[]>('/products/b2b_catalog/'),
-  create: (data: Partial<Product>) => api.post<Product>('/products/', data),
-  update: (id: string, data: Partial<Product>) => api.patch<Product>(`/products/${id}/`, data),
+    api.get<ApiProduct[]>('/products/', params),
+  getById: (id: string) => api.get<ApiProduct>(`/products/${id}/`),
+  getB2BCatalog: () => api.get<ApiProduct[]>('/products/b2b_catalog/'),
+  create: (data: Record<string, unknown>) => api.post<ApiProduct>('/products/', data),
+  update: (id: string, data: Record<string, unknown>) => api.patch<ApiProduct>(`/products/${id}/`, data),
   delete: (id: string) => api.delete<void>(`/products/${id}/`),
 };
 
@@ -271,6 +300,10 @@ export interface ApiOrderRow {
   source?: string;
   client?: number | string;
   client_name?: string;
+  agent?: number | string | null;
+  driver?: number | string | null;
+  agent_name?: string;
+  driver_name?: string;
   status?: string;
   total_amount?: number | string;
   paid_amount?: number | string;
@@ -302,12 +335,28 @@ export const orderApi = {
   getAll: () => api.get<ApiOrderRow[]>('/orders/'),
   getById: (id: string) => api.get<ApiOrderRow>(`/orders/${id}/`),
   create: (data: Partial<Order>) => api.post<Order>('/orders/', data),
-  update: (id: string, data: Partial<Order>) => api.patch<Order>(`/orders/${id}/`, data),
+  update: (id: string, data: Record<string, unknown>) =>
+    api.patch<ApiOrderRow>(`/orders/${id}/`, data),
   delete: (id: string) => api.delete<void>(`/orders/${id}/`),
 };
 
 export const paymentApi = {
   getAll: () => api.get<ApiPaymentRow[]>('/payments/'),
+  create: (data: Record<string, unknown>) => api.post<ApiPaymentRow>('/payments/', data),
+};
+
+export interface ApiExpenseRow {
+  id: number | string;
+  category?: string;
+  amount?: number | string;
+  description?: string;
+  date?: string;
+  created_at?: string;
+}
+
+export const expenseApi = {
+  getAll: () => api.get<ApiExpenseRow[]>('/expenses/'),
+  create: (data: Record<string, unknown>) => api.post<ApiExpenseRow>('/expenses/', data),
 };
 
 export interface TelegramSettingsDto {
@@ -335,19 +384,19 @@ export const telegramApi = {
 
 // ==================== TYPES ====================
 
-interface Category {
-  id: string;
+export interface ApiCategory {
+  id: string | number;
   name: string;
   description?: string;
   image?: string;
-  parent?: string;
+  parent?: string | number | null;
   sort_order: number;
   is_active: boolean;
   created_at: string;
 }
 
-interface Brand {
-  id: string;
+export interface ApiBrand {
+  id: string | number;
   name: string;
   logo?: string;
   description?: string;
@@ -355,21 +404,22 @@ interface Brand {
   created_at: string;
 }
 
-interface Product {
-  id: string;
+export interface ApiProduct {
+  id: string | number;
   name: string;
   sku: string;
   barcode?: string;
-  description: string;
-  category: string;
+  description?: string;
+  image?: string;
+  category: string | number;
   category_name?: string;
-  brand?: string;
+  brand?: string | number | null;
   brand_name?: string;
   unit: string;
-  weight?: number;
-  base_price: number;
-  b2b_price: number;
-  cost_price: number;
+  weight?: number | string | null;
+  base_price: number | string;
+  b2b_price: number | string;
+  cost_price: number | string;
   min_stock: number;
   max_stock: number;
   is_active: boolean;

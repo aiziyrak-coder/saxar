@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -6,6 +6,7 @@ import { Wallet, ArrowUpRight, History, CheckCircle2, AlertCircle, Loader2 } fro
 import { addNotification } from '../../platform/notifications';
 import { useAuth } from '../../context/AuthContext';
 import { useFirestore } from '../../hooks/useFirestore';
+import { fetchDriverOrdersMerged } from '../../utils/mergedData';
 import type { Client, Order, Payment } from '../../types';
 
 export default function DriverFinance() {
@@ -14,14 +15,23 @@ export default function DriverFinance() {
   const [saving, setSaving] = useState(false);
   const { userData } = useAuth();
   const driverUid = userData?.uid ?? '';
-  const { data: orders } = useFirestore<Order>('orders');
+  const [orders, setOrders] = useState<Order[]>([]);
+  useEffect(() => {
+    if (!driverUid) return;
+    void fetchDriverOrdersMerged(userData?.djangoUserId, driverUid).then(setOrders);
+  }, [driverUid, userData?.djangoUserId]);
   const { data: clients } = useFirestore<Client>('clients');
   const { data: payments, create: createPayment } = useFirestore<Payment>('payments');
 
   const myOrderClientIds = useMemo(() => {
     const ids = new Set<string>();
     for (const o of orders) {
-      if (o.driverId === driverUid) ids.add(o.clientId);
+      if (
+        o.driverId === driverUid ||
+        o.driverId === String(userData?.djangoUserId ?? '')
+      ) {
+        ids.add(o.clientId);
+      }
     }
     return ids;
   }, [orders, driverUid]);

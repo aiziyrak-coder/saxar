@@ -7,6 +7,7 @@ import AccountantLayout from './layouts/AccountantLayout';
 import WarehouseLayout from './layouts/WarehouseLayout';
 import ProductionLayout from './layouts/ProductionLayout';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import NotFoundRedirect from './components/NotFoundRedirect';
 import { ThemeProvider } from './context/ThemeContext';
 import { PlatformGlobal } from './components/platform/PlatformGlobal';
 import { Loader2 } from 'lucide-react';
@@ -30,6 +31,7 @@ const AdminLandingSettings = lazy(() => import('./pages/admin/AdminLandingSettin
 const AdminProduction = lazy(() => import('./pages/admin/AdminProduction'));
 const AdminAgents = lazy(() => import('./pages/admin/AdminAgents'));
 const AdminLogistics = lazy(() => import('./pages/admin/AdminLogistics'));
+const AdminProducts = lazy(() => import('./pages/admin/AdminProducts'));
 const AdminWorkspace = lazy(() => import('./pages/admin/AdminWorkspace'));
 
 // Lazy loaded B2B Pages
@@ -105,6 +107,7 @@ function AppRoutes() {
             <Route path="dashboard" element={<Suspense fallback={<PageLoader />}><AdminDashboard /></Suspense>} />
             <Route path="orders" element={<Suspense fallback={<PageLoader />}><AdminOrders /></Suspense>} />
             <Route path="clients" element={<Suspense fallback={<PageLoader />}><AdminClients /></Suspense>} />
+            <Route path="products" element={<Suspense fallback={<PageLoader />}><AdminProducts /></Suspense>} />
             <Route path="wms" element={<Suspense fallback={<PageLoader />}><AdminWMS /></Suspense>} />
             <Route path="finance" element={<Suspense fallback={<PageLoader />}><AdminFinance /></Suspense>} />
             <Route path="reports" element={<Suspense fallback={<PageLoader />}><AdminReports /></Suspense>} />
@@ -175,7 +178,7 @@ function AppRoutes() {
         </Route>
 
         {/* 404 - barcha nomatch yo'llar */}
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<NotFoundRedirect />} />
       </Routes>
     </div>
   );

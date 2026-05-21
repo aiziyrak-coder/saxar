@@ -34,6 +34,11 @@ service cloud.firestore {
       return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'driver';
     }
 
+    function isStaffCatalog() {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in
+        ['admin', 'accountant', 'warehouse', 'production'];
+    }
+
     function hasOnlyAllowedFields(fields) {
       return request.resource.data.keys().hasOnly(fields);
     }
@@ -54,7 +59,7 @@ service cloud.firestore {
       return hasOnlyAllowedFields(['uid', 'email', 'role', 'name', 'phone', 'createdAt']) &&
              data.uid is string &&
              data.email is string &&
-             data.role in ['admin', 'b2b', 'agent', 'driver'] &&
+             data.role in ['admin', 'b2b', 'agent', 'driver', 'warehouse', 'accountant', 'production'] &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              (!('phone' in data) || (data.phone is string && data.phone.size() < 20)) &&
              data.createdAt is string;
@@ -85,14 +90,10 @@ service cloud.firestore {
     }
 
     function isValidOrder(data) {
-      return hasOnlyAllowedFields(['clientId', 'agentId', 'date', 'totalAmount', 'status', 'items', 'createdAt']) &&
-             data.clientId is string &&
-             (!('agentId' in data) || data.agentId is string) &&
-             data.date is string &&
+      return data.clientId is string &&
              data.totalAmount is number && data.totalAmount >= 0 &&
-             data.status in ['Yangi', 'Tasdiqlangan', 'Yetkazilmoqda', 'Yakunlangan', 'Bekor qilingan'] &&
-             data.items is list && data.items.size() <= 100 &&
-             data.createdAt is string;
+             data.createdAt is string &&
+             (!('status' in data) || data.status is string);
     }
 
     function isValidTransaction(data) {
@@ -132,44 +133,55 @@ service cloud.firestore {
     }
 
     match /clients/{clientId} {
-      allow read: if isAdmin() || isAgent() || isB2B() || true;  // Demo uchun
-      allow create: if isAdmin() || true;  // Demo uchun
-      allow update: if isAdmin() || true;  // Demo uchun
+      allow read: if isAdmin() || isAgent() || (isB2B() && isOwner(clientId));
+      allow create: if isAdmin() || (isB2B() && isOwner(clientId));
+      allow update: if isAdmin() || (isB2B() && isOwner(clientId));
       allow delete: if isAdmin();
     }
 
     match /products/{productId} {
-      allow read: if true;  // Demo uchun - hammaga o'qish ruxsat
-      allow create: if isAdmin() || true;  // Demo uchun
-      allow update: if isAdmin() || true;  // Demo uchun
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin() || isStaffCatalog();
       allow delete: if isAdmin();
     }
 
-    // Categories - demo uchun ochiq
     match /categories/{categoryId} {
-      allow read: if true;
-      allow create: if true;
-      allow update: if true;
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin() || isStaffCatalog();
       allow delete: if isAdmin();
     }
 
-    // Brands - demo uchun ochiq
     match /brands/{brandId} {
-      allow read: if true;
-      allow create: if true;
-      allow update: if true;
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin() || isStaffCatalog();
       allow delete: if isAdmin();
+    }
+
+    match /inventory/{itemId} {
+      allow read: if isAuthenticated() && (isAdmin() || isStaffCatalog() || isAgent() || isDriver());
+      allow create, update: if isAdmin() || isStaffCatalog();
+      allow delete: if isAdmin();
+    }
+
+    match /inventory_transactions/{txId} {
+      allow read: if isAuthenticated() && (isAdmin() || isStaffCatalog());
+      allow create: if isAdmin() || isStaffCatalog();
+      allow update, delete: if isAdmin();
     }
 
     match /orders/{orderId} {
-      allow read: if isAdmin() || 
-                  (isB2B() && resource.data.clientId == request.auth.uid) || 
-                  (isAgent() && resource.data.agentId == request.auth.uid);
-      allow create: if (isAdmin() || isB2B() || isAgent()) && isValidOrder(request.resource.data);
-      allow update: if (isAdmin() || 
-                       (isB2B() && resource.data.clientId == request.auth.uid) || 
-                       (isAgent() && resource.data.agentId == request.auth.uid)) && 
-                       isValidOrder(request.resource.data);
+      allow read: if isAdmin() ||
+                  (isB2B() && resource.data.clientId == request.auth.uid) ||
+                  (isAgent() && resource.data.agentId == request.auth.uid) ||
+                  (isDriver() && resource.data.driverId == request.auth.uid) ||
+                  isStaffCatalog();
+      allow create: if isAuthenticated() && (isAdmin() || isB2B() || isAgent() || isDriver() || isStaffCatalog()) &&
+                    isValidOrder(request.resource.data);
+      allow update: if isAuthenticated() && (isAdmin() ||
+                       (isB2B() && resource.data.clientId == request.auth.uid) ||
+                       (isAgent() && resource.data.agentId == request.auth.uid) ||
+                       (isDriver() && resource.data.driverId == request.auth.uid) ||
+                       isStaffCatalog());
       allow delete: if isAdmin();
     }
 

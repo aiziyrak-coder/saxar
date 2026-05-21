@@ -2,7 +2,6 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Package, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { notifyPlannedFeature } from '../../platform/notifications';
 
 export default function ProductionTransfer() {
   const navigate = useNavigate();
@@ -29,7 +28,7 @@ export default function ProductionTransfer() {
             className="gap-2"
             type="button"
             onClick={() => {
-              notifyPlannedFeature('WMS kirim', 'Tayyor mahsulotni omborga yozish rejada.');
+              window.location.href = '/warehouse/receiving';
               navigate('/warehouse/wms');
             }}
           >

@@ -4,7 +4,7 @@ import { Button } from '../../components/ui/Button';
 import { User, Target, LogOut, Settings, Phone, MapPin, Award } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { notifyPlannedFeature } from '../../platform/notifications';
+import { addNotification } from '../../platform/notifications';
 import { useFirestore } from '../../hooks/useFirestore';
 import type { Order } from '../../types';
 
@@ -107,7 +107,7 @@ export default function AgentProfile() {
           variant="outline"
           className="w-full justify-start gap-3 h-12 text-slate-700 bg-white border-slate-200 shadow-sm"
           type="button"
-          onClick={() => notifyPlannedFeature('Agent sozlamalari')}
+          onClick={() => addNotification('Sozlamalar', 'Profil ma’lumotlari Firebase akkauntingizda.')}
         >
           <Settings className="h-5 w-5 text-slate-400" /> Sozlamalar
         </Button>

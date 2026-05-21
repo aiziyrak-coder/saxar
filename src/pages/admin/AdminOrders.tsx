@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -9,13 +9,19 @@ import { downloadCsv } from '../../platform/csv';
 import { copyToClipboard } from '../../platform/clipboard';
 import { printHtmlDocument } from '../../platform/printHtml';
 import { buildOrderReceiptHtml, type OrderReceiptLike } from '../../platform/orderReceipt';
-import { normalizeSku } from '../../platform/skuFormat';
 import { addNotification } from '../../platform/notifications';
 import { ORDER_NOTE_TEMPLATES } from '../../platform/orderNoteTemplates';
 import { useFirestore } from '../../hooks/useFirestore';
-import { generateOrderNumber } from '../../services/firestore';
+import { useCatalogProducts } from '../../hooks/useCatalogProducts';
+import { generateOrderNumber, orderService } from '../../services/firestore';
+import { orderApi } from '../../services/api';
+import { hasDjangoJwt } from '../../services/djangoAuth';
+import { mapApiOrderRowToOrder } from '../../services/b2bFromApi';
+import { resolveDjangoClientId } from '../../utils/djangoClientId';
+import { syncApiOrderToFirestore } from '../../utils/orderSync';
+import type { ApiOrderRow } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import type { Order, OrderStatus, Product, Client } from '../../types';
+import type { Order, OrderStatus, Client } from '../../types';
 
 interface OrderRow extends OrderReceiptLike {}
 
@@ -54,14 +60,59 @@ interface OrderItemForm {
 }
 
 export default function AdminOrders() {
-  const { userData } = useAuth();
-  const { data: orders, loading: ordersLoading, create: createOrder } = useFirestore<Order>('orders');
-  const { data: products } = useFirestore<Product>('products');
+  useAuth();
+  const { data: fsOrders, loading: fsLoading } = useFirestore<Order>('orders');
+  const [apiOrders, setApiOrders] = useState<Order[]>([]);
+  const [apiLoading, setApiLoading] = useState(false);
+
+  const reloadApiOrders = async () => {
+    if (!hasDjangoJwt()) {
+      setApiOrders([]);
+      return;
+    }
+    setApiLoading(true);
+    try {
+      const rows = await orderApi.getAll();
+      setApiOrders(rows.map(mapApiOrderRowToOrder));
+    } catch {
+      setApiOrders([]);
+    } finally {
+      setApiLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void reloadApiOrders();
+  }, []);
+
+  const orders = useMemo(() => {
+    const seen = new Set<string>();
+    const merged: Order[] = [];
+    for (const o of apiOrders) {
+      const key = o.orderNumber || o.id;
+      merged.push(o);
+      seen.add(key);
+    }
+    for (const o of fsOrders) {
+      const key = o.orderNumber || o.id;
+      if (!seen.has(key)) {
+        merged.push(o);
+        seen.add(key);
+      }
+    }
+    return merged.sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  }, [apiOrders, fsOrders]);
+
+  const ordersLoading = fsLoading || apiLoading;
+  const { data: products } = useCatalogProducts();
   const { data: clients } = useFirestore<Client>('clients');
   const [search, setSearch] = useState('');
   const debounced = useDebouncedValue(search, 300);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [detail, setDetail] = useState<OrderRow | null>(null);
+  const [detailOrder, setDetailOrder] = useState<Order | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [orderForm, setOrderForm] = useState({
@@ -97,42 +148,62 @@ export default function AdminOrders() {
     ));
   };
 
+  const patchOrderStatus = async (order: Order, status: Order['status']) => {
+    setSaving(true);
+    try {
+      if (hasDjangoJwt() && /^\d+$/.test(String(order.id))) {
+        await orderApi.update(String(order.id), { status });
+      }
+      await orderService.update(order.id, {
+        status,
+        updatedAt: new Date().toISOString(),
+      });
+      await reloadApiOrders();
+      addNotification('Holat yangilandi', `${order.orderNumber || order.id} → ${status}`);
+      setDetail(null);
+      setDetailOrder(null);
+    } catch {
+      addNotification('Xatolik', 'Holat yangilanmadi');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleCreateOrder = async () => {
     if (!orderForm.clientName.trim() || orderItems.every(i => !i.productName)) return;
+    if (!hasDjangoJwt()) {
+      addNotification('API', 'Buyurtma yaratish uchun Django JWT kerak. Qayta kiring.');
+      return;
+    }
     setSaving(true);
     try {
       const orderNumber = generateOrderNumber();
       const validItems = orderItems.filter(i => i.productName.trim());
-      await createOrder({
-        orderNumber,
+      const djangoClientId = orderForm.clientId
+        ? await resolveDjangoClientId(orderForm.clientId)
+        : null;
+      if (!djangoClientId) {
+        addNotification('Xatolik', 'Mijoz Django ID topilmadi. Mijozni tasdiqlang yoki qayta ro‘yxatdan o‘tkazing.');
+        return;
+      }
+      const created = await orderApi.create({
         source: 'admin',
         status: 'pending',
-        clientId: orderForm.clientId,
-        clientName: orderForm.clientName.trim(),
-        clientPhone: orderForm.clientPhone.trim(),
-        clientAddress: orderForm.clientAddress.trim(),
-        items: validItems.map((item, idx) => ({
-          id: `item-${idx}`,
-          productId: item.productId,
-          productName: item.productName,
-          sku: normalizeSku(products.find(p => p.id === item.productId)?.sku || ''),
-          unit: 'kg',
+        client: djangoClientId,
+        total_amount: orderTotal,
+        items: validItems.map((item) => ({
+          product: Number(item.productId) || item.productId,
           quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          discountPercent: 0,
-          totalPrice: item.quantity * item.unitPrice,
+          price: item.unitPrice,
+          total: item.quantity * item.unitPrice,
         })),
-        subtotal: orderTotal,
-        discountAmount: 0,
-        deliveryFee: 0,
-        totalAmount: orderTotal,
-        paidAmount: 0,
-        paymentStatus: 'pending',
-        orderDate: new Date().toISOString(),
-        notes: orderForm.notes.trim(),
-        createdBy: userData?.uid || '',
-        createdByName: userData?.name || '',
-      } as Omit<Order, 'id'>);
+      } as Record<string, unknown>);
+      try {
+        await syncApiOrderToFirestore(created as ApiOrderRow);
+      } catch {
+        addNotification('Ogohlantirish', 'Buyurtma API da yaratildi, lekin ombor sinxroni xato — Mahsulotlar → Firestore sinxronini tekshiring.');
+      }
+      await reloadApiOrders();
       setShowCreateModal(false);
       setOrderForm({ clientId: '', clientName: '', clientPhone: '', clientAddress: '', notes: '' });
       setOrderItems([{ productId: '', productName: '', quantity: 1, unitPrice: 0 }]);
@@ -293,7 +364,18 @@ export default function AdminOrders() {
                     </span>
                   </td>
                   <td className="py-4 px-6 text-right space-x-1 whitespace-nowrap">
-                    <Button variant="ghost" size="sm" type="button" onClick={() => setDetail(order)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      type="button"
+                      onClick={() => {
+                        setDetail(order);
+                        const full = orders.find(
+                          (o) => (o.orderNumber || o.id) === order.id
+                        );
+                        setDetailOrder(full ?? null);
+                      }}
+                    >
                       Ko&apos;rish
                     </Button>
                     <Button variant="ghost" size="sm" type="button" title="Nusxa" onClick={() => void copyToClipboard(order.id)}>
@@ -336,11 +418,37 @@ export default function AdminOrders() {
                 ))}
               </div>
             </div>
+            {detailOrder && hasDjangoJwt() && (
+              <div className="flex flex-wrap gap-2">
+                <span className="text-xs font-semibold text-slate-500 w-full">Holatni o‘zgartirish</span>
+                {(['confirmed', 'picking', 'packed', 'in_transit', 'delivered', 'cancelled'] as const).map(
+                  (st) => (
+                    <Button
+                      key={st}
+                      size="sm"
+                      variant="outline"
+                      type="button"
+                      disabled={saving || detailOrder.status === st}
+                      onClick={() => void patchOrderStatus(detailOrder, st)}
+                    >
+                      {st}
+                    </Button>
+                  )
+                )}
+              </div>
+            )}
             <div className="flex gap-2 justify-end pt-2">
               <Button variant="outline" type="button" onClick={() => printOne(detail)}>
                 Chop etish
               </Button>
-              <Button variant="primary" type="button" onClick={() => setDetail(null)}>
+              <Button
+                variant="primary"
+                type="button"
+                onClick={() => {
+                  setDetail(null);
+                  setDetailOrder(null);
+                }}
+              >
                 Yopish
               </Button>
             </div>

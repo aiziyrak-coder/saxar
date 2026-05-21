@@ -57,12 +57,17 @@ export function mapApiOrderRowToOrder(row: ApiOrderRow): Order {
   const src = String(row.source || 'b2b').toLowerCase();
   const source: OrderSource = src === 'agent' ? 'agent' : src === 'admin' ? 'admin' : 'b2b';
 
+  const agentId = row.agent != null ? String(row.agent) : undefined;
+  const driverId = row.driver != null ? String(row.driver) : undefined;
+
   return {
     id,
     orderNumber: `ORD-${id}`,
     source,
     status: normalizeOrderStatus(row.status),
     clientId,
+    agentId,
+    driverId,
     clientName: String(row.client_name ?? ''),
     clientPhone: '',
     clientAddress: '',

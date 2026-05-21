@@ -75,6 +75,16 @@ class AuthenticationAPITests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
+    def test_login_inactive_user_denied(self):
+        self.user.is_active = False
+        self.user.save(update_fields=["is_active"])
+        response = self.client.post(
+            "/api/accounts/auth/login/",
+            {"username": "test@example.com", "password": "testpass123"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
     def test_protected_endpoint_without_auth(self):
         response = self.client.get("/api/orders/")
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
@@ -104,13 +114,10 @@ class PermissionTests(APITestCase):
         response = self.client.get("/api/accounts/users/role/b2b/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-    def test_b2b_access_users_by_role_policy(self):
+    def test_b2b_denied_users_by_role(self):
         self.client.force_authenticate(user=self.b2b_user)
         response = self.client.get("/api/accounts/users/role/admin/")
-        self.assertIn(
-            response.status_code,
-            [status.HTTP_200_OK, status.HTTP_403_FORBIDDEN],
-        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
 
 class HealthCheckTests(TestCase):
@@ -121,3 +128,17 @@ class HealthCheckTests(TestCase):
         body = response.json()
         self.assertEqual(body.get("status"), "ok")
         self.assertEqual(body.get("database"), "ok")
+
+    def test_health_ok_with_ssl_redirect_settings(self):
+        """Prod: SECURE_SSL_REDIRECT + ichki health — 301 emas, 200."""
+        from django.test import override_settings
+
+        with override_settings(
+            DJANGO_SECURE_SSL="1",
+            SECURE_SSL_REDIRECT=True,
+            DJANGO_BEHIND_PROXY="1",
+            SECURE_PROXY_SSL_HEADER=("HTTP_X_FORWARDED_PROTO", "https"),
+        ):
+            client = APIClient()
+            response = client.get("/api/health/")
+            self.assertEqual(response.status_code, 200, response.content)

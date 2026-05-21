@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -8,6 +9,15 @@ import { useFirestore } from '../../hooks/useFirestore';
 import { promotionService } from '../../services/firestore';
 import type { Promotion } from '../../types';
 import { telegramApi, ApiError, type TelegramSettingsDto } from '../../services/api';
+import {
+  UsersRbacPanel,
+  SecurityAuditPanel,
+  IntegrationsApiPanel,
+  SmsNotificationsPanel,
+} from './settings/SettingsPanels';
+import { hasDjangoJwt } from '../../services/djangoAuth';
+import { platformApi } from '../../services/platformApi';
+import { addNotification } from '../../platform/notifications';
 
 const PROMO_TYPES = [
   { value: 'percent', label: 'Foiz chegirma (%)' },
@@ -50,7 +60,12 @@ function TelegramSettingsPanel() {
         setInviteUrl('');
       }
     } catch (e) {
-      setErr(e instanceof ApiError ? e.message : 'Ma’lumotni yuklab bo‘lmadi (JWT / admin huquqi).');
+      const msg = e instanceof ApiError ? e.message : 'Ma’lumotni yuklab bo‘lmadi (JWT / admin huquqi).';
+      setErr(
+        hasDjangoJwt()
+          ? msg
+          : `${msg} Admin sifatida qayta kiring — Django JWT avtomatik olinadi.`
+      );
     } finally {
       setLoading(false);
     }
@@ -233,8 +248,19 @@ function TelegramSettingsPanel() {
   );
 }
 
+type SettingsTab = 'prices' | 'users' | 'security' | 'api' | 'sms' | 'telegram';
+
 export default function AdminSettings() {
-  const [activeTab, setActiveTab] = useState<'prices' | 'users' | 'security' | 'api' | 'sms' | 'telegram'>('prices');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab') as SettingsTab | null;
+  const [activeTab, setActiveTab] = useState<SettingsTab>(
+    tabParam && ['prices', 'users', 'security', 'api', 'sms', 'telegram'].includes(tabParam) ? tabParam : 'prices'
+  );
+
+  const selectTab = (tab: SettingsTab) => {
+    setActiveTab(tab);
+    setSearchParams({ tab }, { replace: true });
+  };
   const [showPromoModal, setShowPromoModal] = useState(false);
   const [promoForm, setPromoForm] = useState({
     name: '',
@@ -247,8 +273,41 @@ export default function AdminSettings() {
     isActive: true,
   });
   const [saving, setSaving] = useState(false);
+  const [markupPercent, setMarkupPercent] = useState(15);
+  const [creditNew, setCreditNew] = useState(5_000_000);
+  const [creditTrusted, setCreditTrusted] = useState(50_000_000);
+  const [pricingSaving, setPricingSaving] = useState(false);
 
   const { data: promotions, loading: promoLoading, refresh: refreshPromos } = useFirestore<Promotion>('promotions');
+
+  useEffect(() => {
+    if (!hasDjangoJwt()) return;
+    platformApi.getSettings().then((s) => {
+      setMarkupPercent(s.default_b2b_markup_percent);
+      setCreditNew(s.credit_limit_new_client);
+      setCreditTrusted(s.credit_limit_trusted_client);
+    }).catch(() => {});
+  }, [activeTab]);
+
+  const savePricing = async () => {
+    if (!hasDjangoJwt()) {
+      addNotification('Sozlamalar', 'Admin JWT kerak — qayta kiring.');
+      return;
+    }
+    setPricingSaving(true);
+    try {
+      await platformApi.putSettings({
+        default_b2b_markup_percent: markupPercent,
+        credit_limit_new_client: creditNew,
+        credit_limit_trusted_client: creditTrusted,
+      });
+      addNotification('Narxlar', 'Saqlandi.');
+    } catch {
+      addNotification('Xatolik', 'Saqlashda xato.');
+    } finally {
+      setPricingSaving(false);
+    }
+  };
 
   const handleSavePromo = async () => {
     if (!promoForm.name.trim()) return;
@@ -298,26 +357,42 @@ export default function AdminSettings() {
           <Button
             variant="ghost"
             className={`w-full justify-start ${activeTab === 'prices' ? 'text-emerald-600 bg-emerald-50 font-bold' : 'text-slate-600 hover:bg-slate-100'}`}
-            onClick={() => setActiveTab('prices')}
+            onClick={() => selectTab('prices')}
           >
             <Percent className="h-5 w-5 mr-3" /> Narxlar va Chegirmalar
           </Button>
-          <Button variant="ghost" className="w-full justify-start text-slate-600 hover:bg-slate-100" onClick={() => setActiveTab('users')}>
+          <Button
+            variant="ghost"
+            className={`w-full justify-start ${activeTab === 'users' ? 'text-emerald-600 bg-emerald-50 font-bold' : 'text-slate-600 hover:bg-slate-100'}`}
+            onClick={() => selectTab('users')}
+          >
             <Users className="h-5 w-5 mr-3" /> Foydalanuvchilar (RBAC)
           </Button>
-          <Button variant="ghost" className="w-full justify-start text-slate-600 hover:bg-slate-100" onClick={() => setActiveTab('security')}>
+          <Button
+            variant="ghost"
+            className={`w-full justify-start ${activeTab === 'security' ? 'text-emerald-600 bg-emerald-50 font-bold' : 'text-slate-600 hover:bg-slate-100'}`}
+            onClick={() => selectTab('security')}
+          >
             <Shield className="h-5 w-5 mr-3" /> Xavfsizlik va Audit
           </Button>
-          <Button variant="ghost" className="w-full justify-start text-slate-600 hover:bg-slate-100" onClick={() => setActiveTab('api')}>
+          <Button
+            variant="ghost"
+            className={`w-full justify-start ${activeTab === 'api' ? 'text-emerald-600 bg-emerald-50 font-bold' : 'text-slate-600 hover:bg-slate-100'}`}
+            onClick={() => selectTab('api')}
+          >
             <Database className="h-5 w-5 mr-3" /> Integratsiyalar (API)
           </Button>
-          <Button variant="ghost" className="w-full justify-start text-slate-600 hover:bg-slate-100" onClick={() => setActiveTab('sms')}>
+          <Button
+            variant="ghost"
+            className={`w-full justify-start ${activeTab === 'sms' ? 'text-emerald-600 bg-emerald-50 font-bold' : 'text-slate-600 hover:bg-slate-100'}`}
+            onClick={() => selectTab('sms')}
+          >
             <Bell className="h-5 w-5 mr-3" /> Xabarnomalar (SMS)
           </Button>
           <Button
             variant="ghost"
             className={`w-full justify-start ${activeTab === 'telegram' ? 'text-emerald-600 bg-emerald-50 font-bold' : 'text-slate-600 hover:bg-slate-100'}`}
-            onClick={() => setActiveTab('telegram')}
+            onClick={() => selectTab('telegram')}
           >
             <Send className="h-5 w-5 mr-3" /> Telegram bot
           </Button>
@@ -325,6 +400,10 @@ export default function AdminSettings() {
 
         <div className="md:col-span-3 space-y-6">
           {activeTab === 'telegram' && <TelegramSettingsPanel />}
+          {activeTab === 'users' && <UsersRbacPanel />}
+          {activeTab === 'security' && <SecurityAuditPanel />}
+          {activeTab === 'api' && <IntegrationsApiPanel />}
+          {activeTab === 'sms' && <SmsNotificationsPanel />}
           {activeTab === 'prices' && (
             <Card>
               <h3 className="text-lg font-bold text-slate-900 mb-6 border-b border-slate-100 pb-4">Narx siyosati va Aksiyalar</h3>
@@ -332,7 +411,7 @@ export default function AdminSettings() {
                 <div>
                   <h4 className="font-medium text-slate-900 mb-2">B2B Mijozlar uchun ulgurji narx ustamasi (Markup)</h4>
                   <div className="flex items-center gap-4">
-                    <Input type="number" defaultValue="15" className="w-24" />
+                    <Input type="number" min={0} value={markupPercent} onChange={(e) => setMarkupPercent(Number(e.target.value) || 0)} className="w-24" />
                     <span className="text-slate-600">% (Tannarx ustiga)</span>
                   </div>
                   <p className="text-sm text-slate-500 mt-2">Barcha mahsulotlar uchun standart ustama foizi.</p>
@@ -389,25 +468,23 @@ export default function AdminSettings() {
                     <div>
                       <label className="text-sm text-slate-600 mb-1 block">Yangi do‘konlar uchun limit</label>
                       <div className="flex items-center gap-2">
-                        <Input type="number" defaultValue="5000000" />
+                        <Input type="number" min={0} value={creditNew} onChange={(e) => setCreditNew(Number(e.target.value) || 0)} />
                         <span className="text-slate-500">UZS</span>
                       </div>
                     </div>
                     <div>
                       <label className="text-sm text-slate-600 mb-1 block">Ishonchli do‘konlar uchun limit</label>
                       <div className="flex items-center gap-2">
-                        <Input type="number" defaultValue="50000000" />
+                        <Input type="number" min={0} value={creditTrusted} onChange={(e) => setCreditTrusted(Number(e.target.value) || 0)} />
                         <span className="text-slate-500">UZS</span>
                       </div>
                     </div>
                   </div>
+                  <Button variant="primary" type="button" onClick={savePricing} disabled={pricingSaving} className="mt-4">
+                    {pricingSaving ? 'Saqlanmoqda...' : 'Narx siyosatini saqlash'}
+                  </Button>
                 </div>
               </div>
-            </Card>
-          )}
-          {activeTab !== 'prices' && activeTab !== 'telegram' && (
-            <Card>
-              <p className="text-slate-500">Ushbu bo‘lim sozlamalari keyingi yangilanishda qo‘shiladi.</p>
             </Card>
           )}
         </div>

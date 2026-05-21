@@ -62,6 +62,15 @@ if [[ -f .env.saxar ]]; then
     sed -i.bak3 's|^VITE_PUBLIC_API_URL=api$|VITE_PUBLIC_API_URL=/api|' .env.saxar || true
     echo "Tuzatildi: VITE_PUBLIC_API_URL=/api (faqat 'api' yozilgan edi)."
   fi
+  # saxar.uz orqali SPA — ALLOWED_HOSTS da saxar.uz bo'lishi shart (aks holda 400)
+  if ! grep -q 'saxar.uz' .env.saxar 2>/dev/null; then
+    if grep -q '^DJANGO_ALLOWED_HOSTS=' .env.saxar; then
+      sed -i 's/^DJANGO_ALLOWED_HOSTS=.*/DJANGO_ALLOWED_HOSTS=saxar.uz,www.saxar.uz,api.saxar.uz,localhost,127.0.0.1,api,web/' .env.saxar
+    else
+      echo 'DJANGO_ALLOWED_HOSTS=saxar.uz,www.saxar.uz,api.saxar.uz,localhost,127.0.0.1,api,web' >> .env.saxar
+    fi
+    echo "Tuzatildi: DJANGO_ALLOWED_HOSTS (saxar.uz qo'shildi)."
+  fi
 fi
 
 echo "Docker build/up (bir necha daqiqa)..."
@@ -78,6 +87,11 @@ done
 
 echo "Health (ichki):"
 curl -fsS "http://127.0.0.1:18181/api/health/" | head -c 400 || echo "(API javob bermadi — docker compose logs api)"
+echo ""
+
+echo "Migratsiya va rol akkauntlari..."
+docker compose -f docker-compose.saxar-prod.yml --env-file .env.saxar exec -T api python manage.py migrate --noinput
+docker compose -f docker-compose.saxar-prod.yml --env-file .env.saxar exec -T api python manage.py ensure_role_users 2>/dev/null || true
 echo ""
 
 NGINX_AVAILABLE=0
@@ -115,6 +129,9 @@ if [[ "$NGINX_AVAILABLE" -eq 1 ]]; then
     if [[ $C2 -eq 0 ]]; then
       cp "$INSTALL_ROOT/deploy/host-nginx/api.saxar.uz.conf" /etc/nginx/sites-available/api.saxar.uz.conf
       echo "api.saxar.uz uchun SSL nginx o'rnatildi."
+    elif [[ $C1 -eq 0 ]] && [[ -f /etc/letsencrypt/live/saxar.uz/fullchain.pem ]]; then
+      cp "$INSTALL_ROOT/deploy/host-nginx/api.saxar.uz.shared-with-saxar-cert.conf" /etc/nginx/sites-available/api.saxar.uz.conf
+      echo "api.saxar.uz: saxar.uz SSL sertifikati bilan (alohida api cert yo'q)."
     else
       cp "$INSTALL_ROOT/deploy/host-nginx/api.saxar.uz.http-only.conf" /etc/nginx/sites-available/api.saxar.uz.conf
       echo "OGOH: api.saxar.uz uchun certbot muvaffaqiyatsiz (odatda DNS A yozuvi yo'q). api HTTP 80. DNS qo'shgach qayta: bash deploy/remote_bootstrap.sh"
@@ -126,6 +143,10 @@ if [[ "$NGINX_AVAILABLE" -eq 1 ]]; then
   echo "Nginx holati yangilandi."
 else
   echo "OGOH: nginx topilmadi — faqat Docker portlari: 127.0.0.1:18180 va :18181"
+fi
+
+if [[ -x "$INSTALL_ROOT/deploy/post_deploy_verify.sh" ]]; then
+  bash "$INSTALL_ROOT/deploy/post_deploy_verify.sh" || echo "OGOH: post_deploy_verify ba'zi tekshiruvlarda xato berdi."
 fi
 
 echo "Tayyor."

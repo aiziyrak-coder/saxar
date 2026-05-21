@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -8,7 +8,12 @@ import { Wallet, TrendingUp, TrendingDown, FileText, Download, Building2, Loader
 import { useFirestore } from '../../hooks/useFirestore';
 import { downloadCsv } from '../../platform/csv';
 import { extractVatFromInclusive } from '../../platform/vat';
-import { addNotification, notifyPlannedFeature } from '../../platform/notifications';
+import { addNotification } from '../../platform/notifications';
+import { configureIntegrations, goPayroll } from '../../utils/featureActions';
+import { hasDjangoJwt } from '../../services/djangoAuth';
+import { paymentApi } from '../../services/api';
+import { resolveDjangoClientId } from '../../utils/djangoClientId';
+import { platformApi, type PlatformSettingsDto } from '../../services/platformApi';
 import { useAuth } from '../../context/AuthContext';
 import type { Payment, Expense, Client, ExpenseCategory } from '../../types';
 
@@ -26,11 +31,17 @@ const EXPENSE_CATEGORIES: { value: ExpenseCategory; label: string }[] = [
 
 export default function AdminFinance() {
   const { userData } = useAuth();
+  const [platform, setPlatform] = useState<PlatformSettingsDto | null>(null);
   const [activeTab, setActiveTab] = useState<'transactions' | 'aktsverka' | 'expenses'>('transactions');
   const [showModal, setShowModal] = useState<'payment' | 'expense' | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const { data: payments, create: createPayment } = useFirestore<Payment>('payments');
+  useEffect(() => {
+    if (!hasDjangoJwt()) return;
+    platformApi.getSettings().then(setPlatform).catch(() => setPlatform(null));
+  }, []);
+
+  const { data: payments, create: createPaymentFs } = useFirestore<Payment>('payments');
   const { data: expenses, create: createExpense } = useFirestore<Expense>('expenses');
   const { data: clients } = useFirestore<Client>('clients');
 
@@ -38,6 +49,7 @@ export default function AdminFinance() {
     direction: 'in' as 'in' | 'out',
     type: 'cash' as Payment['type'],
     amount: 0,
+    clientId: '',
     clientName: '',
     description: '',
   });
@@ -125,18 +137,35 @@ export default function AdminFinance() {
     if (paymentForm.amount <= 0) return;
     setSaving(true);
     try {
-      await createPayment({
+      const description =
+        paymentForm.description.trim() ||
+        `${paymentForm.direction === 'in' ? 'Kirim' : 'Chiqim'} - ${paymentForm.type}`;
+
+      if (hasDjangoJwt() && paymentForm.clientId) {
+        const djangoClientId = await resolveDjangoClientId(paymentForm.clientId);
+        if (djangoClientId) {
+          await paymentApi.create({
+            client: djangoClientId,
+            amount: paymentForm.amount,
+            type: paymentForm.type,
+            description,
+          });
+        }
+      }
+
+      await createPaymentFs({
         type: paymentForm.type,
         direction: paymentForm.direction,
         amount: paymentForm.amount,
         currency: 'UZS',
+        clientId: paymentForm.clientId || undefined,
         clientName: paymentForm.clientName.trim(),
-        description: paymentForm.description.trim() || `${paymentForm.direction === 'in' ? 'Kirim' : 'Chiqim'} - ${paymentForm.type}`,
+        description,
         createdBy: userData?.uid || '',
         createdByName: userData?.name || '',
       } as Omit<Payment, 'id'>);
       setShowModal(null);
-      setPaymentForm({ direction: 'in', type: 'cash', amount: 0, clientName: '', description: '' });
+      setPaymentForm({ direction: 'in', type: 'cash', amount: 0, clientId: '', clientName: '', description: '' });
       addNotification('To\u2019lov saqlandi', `${paymentForm.amount.toLocaleString()} UZS muvaffaqiyatli kiritildi.`);
     } catch (e) {
       console.error(e);
@@ -391,10 +420,12 @@ export default function AdminFinance() {
                   <div className="h-10 w-10 bg-emerald-50 rounded-lg flex items-center justify-center font-bold text-emerald-600">1C</div>
                   <div>
                     <div className="font-medium text-slate-900">1C: Buxgalteriya</div>
-                    <div className="text-xs text-slate-500">Ulanmagan</div>
+                    <div className="text-xs text-slate-500">
+                      {platform?.onec_enabled ? 'Ulangan' : 'Ulanmagan'}
+                    </div>
                   </div>
                 </div>
-                <Button variant="ghost" size="sm" type="button" onClick={() => notifyPlannedFeature('1C integratsiya')}>
+                <Button variant="ghost" size="sm" type="button" onClick={configureIntegrations}>
                   Sozlash
                 </Button>
               </div>
@@ -404,10 +435,12 @@ export default function AdminFinance() {
                   <div className="h-10 w-10 bg-emerald-50 rounded-lg flex items-center justify-center font-bold text-emerald-600">DX</div>
                   <div>
                     <div className="font-medium text-slate-900">Didox (EHF)</div>
-                    <div className="text-xs text-slate-500">Ulanmagan</div>
+                    <div className="text-xs text-slate-500">
+                      {platform?.didox_enabled ? 'Ulangan' : 'Ulanmagan'}
+                    </div>
                   </div>
                 </div>
-                <Button variant="ghost" size="sm" type="button" onClick={() => notifyPlannedFeature('Didox integratsiya')}>
+                <Button variant="ghost" size="sm" type="button" onClick={configureIntegrations}>
                   Sozlash
                 </Button>
               </div>
@@ -417,10 +450,12 @@ export default function AdminFinance() {
                   <div className="h-10 w-10 bg-slate-100 rounded-lg flex items-center justify-center font-bold text-slate-600">EA</div>
                   <div>
                     <div className="font-medium text-slate-900">E-Aktiv</div>
-                    <div className="text-xs text-slate-500">Ulanmagan</div>
+                    <div className="text-xs text-slate-500">
+                      {platform?.eaktiv_enabled ? 'Ulangan' : 'Ulanmagan'}
+                    </div>
                   </div>
                 </div>
-                <Button variant="outline" size="sm" type="button" onClick={() => notifyPlannedFeature('E-Aktiv ulanish')}>
+                <Button variant="outline" size="sm" type="button" onClick={configureIntegrations}>
                   Ulash
                 </Button>
               </div>
@@ -436,7 +471,7 @@ export default function AdminFinance() {
               variant="primary"
               className="w-full"
               type="button"
-              onClick={() => notifyPlannedFeature('Payroll hisoblash')}
+              onClick={goPayroll}
             >
               Hisoblashni boshlash
             </Button>
@@ -490,8 +525,30 @@ export default function AdminFinance() {
               </div>
             )}
           </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Mijoz (Django API uchun)</label>
+            <select
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm mb-2"
+              value={paymentForm.clientId}
+              onChange={(e) => {
+                const c = clients.find((x) => x.id === e.target.value);
+                setPaymentForm((f) => ({
+                  ...f,
+                  clientId: e.target.value,
+                  clientName: c?.name || f.clientName,
+                }));
+              }}
+            >
+              <option value="">Tanlang</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
           <Input
-            placeholder="Mijoz nomi"
+            placeholder="Mijoz nomi (ixtiyoriy)"
             value={paymentForm.clientName}
             onChange={(e) => setPaymentForm(f => ({ ...f, clientName: e.target.value }))}
           />

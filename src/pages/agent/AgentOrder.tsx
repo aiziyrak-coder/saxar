@@ -5,11 +5,14 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Search, Plus, Minus, ShoppingCart, ArrowLeft, Package, Loader2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useCatalogProducts } from '../../hooks/useCatalogProducts';
 import { useFirestore } from '../../hooks/useFirestore';
-import { orderService, generateOrderNumber } from '../../services/firestore';
+import { orderApi, type ApiOrderRow } from '../../services/api';
+import { hasDjangoJwt } from '../../services/djangoAuth';
+import { resolveDjangoClientId } from '../../utils/djangoClientId';
+import { syncApiOrderToFirestore } from '../../utils/orderSync';
 import { logAudit, AuditActions, EntityTypes } from '../../services/audit';
-import { addToQueue } from '../../services/offlineQueue';
-import type { Product, Order, OrderItem, Client } from '../../types';
+import type { Product, Client } from '../../types';
 
 interface CartRow {
   productId: string;
@@ -29,7 +32,7 @@ export default function AgentOrder() {
   const clientName = searchParams.get('clientName') || '';
 
   const { user, userData } = useAuth();
-  const { data: products } = useFirestore<Product>('products');
+  const { data: products } = useCatalogProducts();
   const { data: clients } = useFirestore<Client>('clients');
   const client = clients.find(c => c.id === clientId);
 
@@ -83,57 +86,34 @@ export default function AgentOrder() {
     if (!user || !userData || !clientId || cart.length === 0) return;
     setSubmitting(true);
     try {
-      const items: OrderItem[] = cart.map(r => ({
-        id: `${r.productId}_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-        productId: r.productId,
-        productName: r.productName,
-        sku: r.sku,
-        unit: r.unit,
-        quantity: r.quantity,
-        unitPrice: r.unitPrice,
-        discountPercent: r.discountPercent,
-        totalPrice: r.totalPrice,
-      }));
-      const order: Omit<Order, 'id'> = {
-        orderNumber: generateOrderNumber(),
+      if (!hasDjangoJwt()) {
+        alert('API sessiyasi yo‘q. Chiqib qayta kiring.');
+        return;
+      }
+      const djangoClientId = await resolveDjangoClientId(clientId);
+      if (!djangoClientId) {
+        alert('Mijoz Django bilan bog‘lanmagan. Admin tasdiqini tekshiring.');
+        return;
+      }
+      const created = await orderApi.create({
         source: 'agent',
-        status: 'pending',
-        clientId,
-        clientName: client?.name || decodeURIComponent(clientName),
-        clientPhone: client?.phone || '',
-        clientAddress: client?.address || '',
-        clientLocation: client?.location,
-        items,
-        subtotal: totalAmount,
-        discountAmount: 0,
-        deliveryFee: 0,
-        totalAmount,
-        paidAmount: 0,
-        paymentStatus: 'pending',
-        agentId: user.uid,
-        agentName: userData.name,
-        orderDate: new Date().toISOString().split('T')[0],
-        createdBy: user.uid,
-        createdByName: userData.name,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-
-      if (typeof navigator !== 'undefined' && !navigator.onLine) {
-        addToQueue('order', order as Record<string, unknown>);
-        setSubmitting(false);
-        alert('Buyurtma saqlandi. Internet ulanganda avtomatik yuboriladi.');
-        navigate('/agent/shops');
-        return;
+        client: djangoClientId,
+        total_amount: totalAmount,
+        items: cart.map((r) => ({
+          product: Number(r.productId) || r.productId,
+          quantity: r.quantity,
+          price: r.unitPrice,
+          total: r.totalPrice,
+        })),
+      } as Record<string, unknown>);
+      try {
+        await syncApiOrderToFirestore(created as ApiOrderRow);
+      } catch {
+        /* ombor sinxron ixtiyoriy */
       }
-
-      const orderId = await orderService.create(order);
-      if (!orderId) {
-        alert('Buyurtma yaratilmadi. Firebase sozlanganini tekshiring.');
-        return;
-      }
-      if (userData) {
-        await logAudit(AuditActions.ORDER_CREATE, EntityTypes.ORDER, orderId, user.uid, userData.name || '', userData.role, undefined, { orderNumber: order.orderNumber, totalAmount, source: 'agent', clientId });
+      const orderId = String((created as ApiOrderRow)?.id ?? '');
+      if (userData && orderId) {
+        await logAudit(AuditActions.ORDER_CREATE, EntityTypes.ORDER, orderId, user.uid, userData.name || '', userData.role, undefined, { totalAmount, source: 'agent', clientId });
       }
       navigate('/agent/shops');
     } catch (e) {

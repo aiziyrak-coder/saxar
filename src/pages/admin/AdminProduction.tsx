@@ -5,7 +5,7 @@ import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
 import { Search, Plus, Play, CheckCircle2, Clock, AlertTriangle, Loader2 } from 'lucide-react';
 import { useFirestore } from '../../hooks/useFirestore';
-import { addNotification, notifyPlannedFeature } from '../../platform/notifications';
+import { addNotification } from '../../platform/notifications';
 import { useAuth } from '../../context/AuthContext';
 import type { Product } from '../../types';
 
@@ -169,7 +169,7 @@ export default function AdminProduction() {
                         variant="ghost"
                         size="sm"
                         type="button"
-                        onClick={() => notifyPlannedFeature('Partiya tafsilotlari', `${order.id} \u2014 batafsil rejada.`)}
+                        onClick={() => addNotification('Partiya', `${order.id} — ${order.product || order.productId}, ${order.quantity} ${order.unit}`)}
                       >
                         Batafsil
                       </Button>
@@ -190,7 +190,7 @@ export default function AdminProduction() {
               variant="outline"
               className="w-full mt-4"
               type="button"
-              onClick={() => notifyPlannedFeature('Xomashyo katalogi')}
+              onClick={() => (window.location.href = '/admin/wms')}
             >
               Barcha xomashyolar
             </Button>
@@ -205,7 +205,7 @@ export default function AdminProduction() {
               variant="primary"
               className="w-full bg-emerald-600 hover:bg-emerald-700"
               type="button"
-              onClick={() => notifyPlannedFeature('Retseptura (BOM)')}
+              onClick={() => addNotification('Retseptura', 'WMS → Mahsulotlar bo‘limida norma va retsepturalarni boshqaring.')}
             >
               Retseptlarni ko&apos;rish
             </Button>

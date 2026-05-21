@@ -37,6 +37,7 @@ class Product(models.Model):
     sku = models.CharField(max_length=64, unique=True)
     barcode = models.CharField(max_length=64, blank=True)
     description = models.TextField(blank=True)
+    image = models.URLField(blank=True, help_text="Mahsulot rasmi (URL)")
     unit = models.CharField(max_length=16, default="kg")
     weight = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     category = models.ForeignKey(Category, on_delete=models.PROTECT, related_name='products')

@@ -1,5 +1,7 @@
 import { orderService, agentCheckInService, paymentService } from './firestore';
 import { isFirebaseConfigured } from '../firebase';
+import { hasDjangoJwt } from './djangoAuth';
+import { paymentApi } from './api';
 import type { AgentCheckIn, Order, Payment } from '../types';
 
 const STORAGE_KEY = 'saxar_offline_queue';
@@ -77,17 +79,36 @@ export async function processQueue(): Promise<{ synced: number; failed: string[]
   for (const item of queue) {
     try {
       if (item.type === 'order') {
-        const id = await orderService.create(item.payload as Omit<Order, 'id'>);
-        if (id) processed.push(item.id);
-        else failed.push(item.id);
+        if (hasDjangoJwt()) {
+          processed.push(item.id);
+        } else {
+          const id = await orderService.create(item.payload as Omit<Order, 'id'>);
+          if (id) processed.push(item.id);
+          else failed.push(item.id);
+        }
       } else if (item.type === 'check_in') {
         const id = await agentCheckInService.create(item.payload as Omit<AgentCheckIn, 'id'>);
         if (id) processed.push(item.id);
         else failed.push(item.id);
       } else if (item.type === 'payment') {
-        const id = await paymentService.create(item.payload as Omit<Payment, 'id'>);
-        if (id) processed.push(item.id);
-        else failed.push(item.id);
+        const p = item.payload as unknown as Payment & {
+          djangoClientId?: number;
+          djangoOrderId?: number;
+        };
+        if (hasDjangoJwt() && p.djangoClientId) {
+          await paymentApi.create({
+            client: p.djangoClientId,
+            order: p.djangoOrderId ?? undefined,
+            amount: p.amount,
+            type: p.type,
+            description: p.description || '',
+          });
+          processed.push(item.id);
+        } else {
+          const id = await paymentService.create(item.payload as Omit<Payment, 'id'>);
+          if (id) processed.push(item.id);
+          else failed.push(item.id);
+        }
       }
     } catch (e) {
       console.error('Offline queue item failed', item.id, e);

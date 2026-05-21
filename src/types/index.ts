@@ -4,6 +4,8 @@ export type UserRole = 'admin' | 'accountant' | 'warehouse' | 'agent' | 'driver'
 export interface User {
   id?: string;
   uid: string;
+  /** Django User PK — REST buyurtmalar/to‘lovlar uchun */
+  djangoUserId?: number;
   email: string;
   phone: string;
   role: UserRole;

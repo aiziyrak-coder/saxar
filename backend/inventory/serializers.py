@@ -1,5 +1,14 @@
 from rest_framework import serializers
+
+from accounts.permissions import IsStaffRole
 from .models import Category, Brand, Product, InventoryBatch, InventoryTransaction
+
+
+def _is_staff_request(request) -> bool:
+    user = getattr(request, "user", None) if request else None
+    return bool(
+        user and user.is_authenticated and getattr(user, "role", None) in IsStaffRole.STAFF
+    )
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -47,8 +56,14 @@ class ProductListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
         fields = [
-            'id', 'name', 'sku', 'description', 'category', 'category_name',
-            'brand', 'brand_name', 'base_price', 'b2b_price', 'unit',
-            'is_active', 'is_b2b_active', 'created_at'
+            'id', 'name', 'sku', 'description', 'image', 'category', 'category_name',
+            'brand', 'brand_name', 'base_price', 'b2b_price', 'cost_price', 'unit',
+            'min_stock', 'max_stock', 'is_active', 'is_b2b_active', 'created_at', 'updated_at',
         ]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if not _is_staff_request(self.context.get("request")):
+            data.pop("cost_price", None)
+        return data
 

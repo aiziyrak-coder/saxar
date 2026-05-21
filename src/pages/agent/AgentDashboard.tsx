@@ -6,11 +6,13 @@ import { MapPin, Target, TrendingUp, ShoppingCart, CheckCircle2, Navigation, Use
 import { useAuth } from '../../context/AuthContext';
 import { useFirestore } from '../../hooks/useFirestore';
 import { addNotification } from '../../platform/notifications';
+import { fetchAllOrdersMerged } from '../../utils/mergedData';
 import type { Client, Order, KPIRecord } from '../../types';
 
 export default function AgentDashboard() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, userData } = useAuth();
+  const [orders, setOrders] = useState<Order[]>([]);
   const [currentLocation, setCurrentLocation] = useState<GeolocationPosition | null>(null);
   const [checkedInShops, setCheckedInShops] = useState<string[]>([]);
   
@@ -21,8 +23,16 @@ export default function AgentDashboard() {
   // Get agent's orders for this month
   const today = new Date();
   const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
-  const { data: orders } = useFirestore<Order>('orders');
-  const agentOrders = orders.filter(o => o.agentId === user?.uid && o.orderDate >= firstDayOfMonth);
+  useEffect(() => {
+    void fetchAllOrdersMerged().then(setOrders);
+  }, []);
+
+  const agentKey = userData?.djangoUserId != null ? String(userData.djangoUserId) : user?.uid ?? '';
+  const agentOrders = orders.filter(
+    (o) =>
+      (o.agentId === agentKey || o.agentId === user?.uid) &&
+      o.orderDate >= firstDayOfMonth
+  );
   
   // Get KPI
   const currentPeriod = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;

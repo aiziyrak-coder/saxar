@@ -6,7 +6,8 @@ import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
 import { Truck, MapPin, CheckCircle2, Clock, AlertCircle, Loader2 } from 'lucide-react';
 import { addBusinessDays } from '../../platform/businessDays';
-import { notifyPlannedFeature, addNotification } from '../../platform/notifications';
+import { addNotification } from '../../platform/notifications';
+import { openLiveMap } from '../../utils/featureActions';
 import { useFirestore } from '../../hooks/useFirestore';
 import type { Delivery, User } from '../../types';
 
@@ -189,7 +190,7 @@ export default function AdminLogistics() {
               variant="outline"
               className="w-full mt-4"
               type="button"
-              onClick={() => notifyPlannedFeature('Vozvratlar ro\u2019yxati')}
+              onClick={() => addNotification('Vozvratlar', 'Yetkazishlar ro‘yxatida «Qaytarilgan» holatini filtrlash uchun ustunlarni tekshiring.')}
             >
               Barchasini ko&apos;rish
             </Button>
@@ -205,7 +206,7 @@ export default function AdminLogistics() {
               variant="primary"
               className="w-full mt-4"
               type="button"
-              onClick={() => notifyPlannedFeature('Jonli xarita', 'GPS kuzatuv integratsiyasi rejada.')}
+              onClick={() => openLiveMap()}
             >
               Kuzatish
             </Button>

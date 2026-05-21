@@ -7,7 +7,8 @@ import { useAuth } from '../../context/AuthContext';
 import { useFirestore } from '../../hooks/useFirestore';
 import { inventoryAdjustment } from '../../services/firestore';
 import { logAudit, AuditActions, EntityTypes } from '../../services/audit';
-import { notifyPlannedFeature } from '../../platform/notifications';
+import { promptBarcodeScan } from '../../utils/featureActions';
+import { addNotification } from '../../platform/notifications';
 import type { InventoryItem, Product } from '../../types';
 
 export default function WarehouseInventoryCount() {
@@ -107,7 +108,7 @@ export default function WarehouseInventoryCount() {
             variant="outline"
             className="gap-2"
             type="button"
-            onClick={() => notifyPlannedFeature('Shtrix-kod skaner', 'Kamera/USB skaner rejada.')}
+            onClick={() => promptBarcodeScan((code) => addNotification('Inventarizatsiya', code))}
           >
             <Barcode className="h-4 w-4" /> Skaner
           </Button>

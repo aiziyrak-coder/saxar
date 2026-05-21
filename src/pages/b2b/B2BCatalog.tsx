@@ -13,12 +13,12 @@ import type { Product, Category } from '../../types';
 export default function B2BCatalog() {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [clientApproved] = useState<boolean>(true); // Demo mode - always approved
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { user } = useAuth();
+  const { user, userData } = useAuth();
+  const clientApproved = userData?.role === 'b2b' ? userData.status === 'active' : true;
   const { addToCart, updateQuantity, items: cartItems } = useCart(user?.uid);
 
   // Load products and categories from API
@@ -45,11 +45,11 @@ export default function B2BCatalog() {
           sku: p.sku,
           barcode: p.barcode,
           unit: p.unit as 'kg' | 'g' | 'l' | 'ml' | 'pcs' | 'box',
-          weight: p.weight,
-          images: [], // API doesn't have images yet
+          weight: p.weight != null ? Number(p.weight) : undefined,
+          images: p.image ? [p.image] : [],
           basePrice: Number(p.base_price),
           b2bPrice: Number(p.b2b_price),
-          costPrice: Number(p.cost_price),
+          costPrice: 0,
           minStock: p.min_stock,
           maxStock: p.max_stock,
           isActive: p.is_active,

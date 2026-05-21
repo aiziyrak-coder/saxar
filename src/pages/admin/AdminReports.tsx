@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { Modal } from '../../components/ui/Modal';
+import { Input } from '../../components/ui/Input';
 import { Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Download, Calendar, Filter, Loader2 } from 'lucide-react';
 import { getPLSummary, getSalesByRegion } from '../../services/dashboard';
 import { downloadCsv } from '../../platform/csv';
-import { addNotification, notifyPlannedFeature } from '../../platform/notifications';
+import { addNotification } from '../../platform/notifications';
 
 const COLORS = ['#059669', '#10b981', '#f59e0b', '#ef4444'];
 
@@ -20,29 +22,38 @@ export default function AdminReports() {
   const [pl, setPl] = useState<{ revenue: number; expenses: number; profit: number } | null>(null);
   const [regionData, setRegionData] = useState<{ name: string; value: number }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showDateModal, setShowDateModal] = useState(false);
+  const [dateFrom, setDateFrom] = useState(() => {
+    const d = new Date();
+    d.setDate(1);
+    return d.toISOString().split('T')[0];
+  });
+  const [dateTo, setDateTo] = useState(() => new Date().toISOString().split('T')[0]);
+  const [categoryFilter, setCategoryFilter] = useState('');
+
+  const loadReport = async (startStr: string, endStr: string) => {
+    setLoading(true);
+    try {
+      const [plRes, regions] = await Promise.all([
+        getPLSummary(startStr, endStr),
+        getSalesByRegion(),
+      ]);
+      setPl(plRes);
+      let mapped = regions.map((r) => ({ name: r.region, value: r.sales }));
+      if (categoryFilter.trim()) {
+        mapped = mapped.filter((r) =>
+          r.name.toLowerCase().includes(categoryFilter.trim().toLowerCase())
+        );
+      }
+      setRegionData(mapped);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const start = new Date();
-      start.setDate(1);
-      const startStr = start.toISOString().split('T')[0];
-      const endStr = new Date().toISOString().split('T')[0];
-      try {
-        const [plRes, regions] = await Promise.all([
-          getPLSummary(startStr, endStr),
-          getSalesByRegion(),
-        ]);
-        if (!cancelled) {
-          setPl(plRes);
-          setRegionData(regions.map(r => ({ name: r.region, value: r.sales })));
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+    loadReport(dateFrom, dateTo);
+  }, [dateFrom, dateTo, categoryFilter]);
 
   const handleExport = () => {
     if (pl) {
@@ -64,7 +75,7 @@ export default function AdminReports() {
             variant="outline"
             className="gap-2"
             type="button"
-            onClick={() => notifyPlannedFeature('Sana oralig‘i', 'Davomatni tanlash kalendari rejada.')}
+            onClick={() => setShowDateModal(true)}
           >
             <Calendar className="h-4 w-4" /> Sana oralig'i
           </Button>
@@ -110,7 +121,10 @@ export default function AdminReports() {
               variant="ghost"
               size="sm"
               type="button"
-              onClick={() => notifyPlannedFeature('Filtr', 'Kategoriya bo‘yicha filtrlash rejada.')}
+              onClick={() => {
+                const v = window.prompt('Hudud nomi bo‘yicha filtr (bo‘sh = hammasi):', categoryFilter);
+                if (v !== null) setCategoryFilter(v);
+              }}
             >
               <Filter className="h-4 w-4" />
             </Button>
@@ -162,6 +176,16 @@ export default function AdminReports() {
           </div>
         </Card>
       </div>
+
+      <Modal isOpen={showDateModal} onClose={() => setShowDateModal(false)} title="Sana oralig'i">
+        <div className="space-y-4">
+          <Input type="date" label="Dan" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          <Input type="date" label="Gacha" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          <Button variant="primary" type="button" onClick={() => setShowDateModal(false)}>
+            Qo'llash
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }

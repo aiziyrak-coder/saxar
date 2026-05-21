@@ -3,7 +3,7 @@ import { Button } from '../../components/ui/Button';
 import { Truck, LogOut, Settings, Phone, ShieldCheck, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { notifyPlannedFeature } from '../../platform/notifications';
+import { addNotification } from '../../platform/notifications';
 
 export default function DriverProfile() {
   const navigate = useNavigate();
@@ -101,7 +101,7 @@ export default function DriverProfile() {
           variant="outline"
           className="w-full justify-start gap-3 h-12"
           type="button"
-          onClick={() => notifyPlannedFeature('Haydovchi sozlamalari')}
+          onClick={() => addNotification('Sozlamalar', 'Telefon va parol Firebase orqali boshqariladi.')}
         >
           <Settings className="h-5 w-5 text-slate-400" /> Sozlamalar
         </Button>

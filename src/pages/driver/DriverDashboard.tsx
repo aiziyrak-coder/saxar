@@ -4,10 +4,14 @@ import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { MapPin, Truck, CheckCircle2, Wallet, Navigation, Package, RotateCcw } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { useFirestore } from '../../hooks/useFirestore';
 import { orderService, paymentService } from '../../services/firestore';
+import { orderApi, paymentApi } from '../../services/api';
+import { hasDjangoJwt } from '../../services/djangoAuth';
 import { logAudit, AuditActions, EntityTypes } from '../../services/audit';
 import { getQueuedItems, processQueue } from '../../services/offlineQueue';
+import { fetchDriverOrdersMerged } from '../../utils/mergedData';
+import { isDjangoOrderId } from '../../utils/orderId';
+import { syncApiOrderToFirestore } from '../../utils/orderSync';
 import type { Order, Payment } from '../../types';
 
 export default function DriverDashboard() {
@@ -23,13 +27,37 @@ export default function DriverDashboard() {
   const [paymentType, setPaymentType] = useState<'cash' | 'card'>('cash');
   const [returnReason, setReturnReason] = useState('');
 
-  // Get driver's assigned orders for today (marshrut varaqasi)
   const today = new Date().toISOString().split('T')[0];
-  const { data: orders, loading, refresh } = useFirestore<Order>('orders');
-  const driverOrders = orders.filter(o => 
-    o.driverId === user?.uid && 
-    o.orderDate === today &&
-    !['cancelled'].includes(o.status)
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const refresh = async () => {
+    if (!user?.uid) {
+      setOrders([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const merged = await fetchDriverOrdersMerged(userData?.djangoUserId, user.uid);
+      setOrders(merged);
+    } catch (e) {
+      console.error(e);
+      setOrders([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void refresh();
+  }, [user?.uid, userData?.djangoUserId]);
+
+  const driverOrders = orders.filter(
+    (o) =>
+      (o.driverId === user?.uid || o.driverId === String(userData?.djangoUserId ?? '')) &&
+      o.orderDate === today &&
+      !['cancelled'].includes(o.status)
   );
 
   const completedOrders = driverOrders.filter(o => o.status === 'delivered');
@@ -45,13 +73,21 @@ export default function DriverDashboard() {
     }
   }, []);
 
+  const patchOrderStatus = async (order: Order, status: Order['status'], extra?: Record<string, unknown>) => {
+    if (isDjangoOrderId(order.id) && hasDjangoJwt()) {
+      const row = await orderApi.update(String(order.id), { status });
+      await syncApiOrderToFirestore(row);
+    } else {
+      await orderService.update(order.id, { status, ...extra });
+    }
+  };
+
   const handleDeliver = async (order: Order) => {
     try {
-      await orderService.update(order.id, {
-        status: 'delivered',
+      await patchOrderStatus(order, 'delivered', {
         deliveredAt: new Date().toISOString(),
       });
-      refresh();
+      await refresh();
     } catch (error) {
       console.error('Failed to mark as delivered:', error);
     }
@@ -75,21 +111,46 @@ export default function DriverDashboard() {
         createdAt: new Date().toISOString(),
       };
 
-      const paymentId = await paymentService.create(payment);
-      if (!paymentId) {
-        console.error('To‘lov yozilmadi: Firebase sozlanmagan.');
-        return;
+      let paymentId = '';
+      const amount = parseInt(paymentAmount, 10);
+      const djangoOrderId = isDjangoOrderId(selectedOrder.id)
+        ? Number(selectedOrder.id)
+        : undefined;
+      const djangoClientId = Number(selectedOrder.clientId);
+      if (hasDjangoJwt() && djangoClientId && !Number.isNaN(djangoClientId)) {
+        const row = await paymentApi.create({
+          client: djangoClientId,
+          order: djangoOrderId,
+          amount,
+          type: payment.type,
+          description: payment.description,
+        });
+        paymentId = String(row.id);
+      } else {
+        const fsId = await paymentService.create(payment);
+        if (!fsId) {
+          console.error('To‘lov yozilmadi: Firebase sozlanmagan.');
+          return;
+        }
+        paymentId = fsId;
+        const newPaidAmount = (selectedOrder.paidAmount || 0) + amount;
+        await orderService.update(selectedOrder.id, {
+          paidAmount: newPaidAmount,
+          paymentStatus: newPaidAmount >= selectedOrder.totalAmount ? 'paid' : 'partial',
+        });
       }
-      if (userData) {
-        await logAudit(AuditActions.PAYMENT_CREATE, EntityTypes.PAYMENT, paymentId, user?.uid || '', userData.name || 'Dastavkachi', userData.role, undefined, { amount: parseInt(paymentAmount), orderId: selectedOrder.id, type: payment.type });
+      if (userData && paymentId) {
+        await logAudit(
+          AuditActions.PAYMENT_CREATE,
+          EntityTypes.PAYMENT,
+          paymentId,
+          user?.uid || '',
+          userData.name || 'Dastavkachi',
+          userData.role,
+          undefined,
+          { amount, orderId: selectedOrder.id, type: payment.type }
+        );
       }
-
-      // Update order paid amount
-      const newPaidAmount = (selectedOrder.paidAmount || 0) + parseInt(paymentAmount);
-      await orderService.update(selectedOrder.id, {
-        paidAmount: newPaidAmount,
-        paymentStatus: newPaidAmount >= selectedOrder.totalAmount ? 'paid' : 'partial',
-      });
 
       setShowPaymentModal(false);
       setPaymentAmount('');
@@ -104,10 +165,7 @@ export default function DriverDashboard() {
     if (!orderToReturn || !returnReason) return;
 
     try {
-      await orderService.update(orderToReturn.id, {
-        status: 'returned',
-        cancelReason: returnReason,
-      });
+      await patchOrderStatus(orderToReturn, 'returned', { cancelReason: returnReason });
       setShowReturnModal(false);
       setReturnReason('');
       setReturnOrderId(null);

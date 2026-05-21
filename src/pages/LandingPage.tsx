@@ -45,11 +45,11 @@ import {
 import { Button } from '../components/ui/Button';
 import { useCart } from '../hooks/useCart';
 import { useAuth } from '../context/AuthContext';
-import { productApi, categoryApi, orderApi } from '../services/api';
+import { productApi, categoryApi } from '../services/api';
+import { submitB2BOrder } from '../utils/b2bOrderSubmit';
 import { logger } from '../services/logger';
-import type { Category, Product, Order } from '../types';
+import type { Category, Product } from '../types';
 import { BRAND, CONTACT, erpHomePathForRole } from '../constants/branding';
-import { orderService, generateOrderNumber } from '../services/firestore';
 import { fetchLandingPublicCopy } from '../services/landingSettings';
 import {
   applyLandingErpPlaceholders,
@@ -136,11 +136,11 @@ export default function LandingPage() {
           sku: p.sku,
           barcode: p.barcode,
           unit: p.unit as 'kg' | 'g' | 'l' | 'ml' | 'pcs' | 'box',
-          weight: p.weight,
-          images: [],
+          weight: p.weight != null ? Number(p.weight) : undefined,
+          images: p.image ? [p.image] : [],
           basePrice: Number(p.base_price),
           b2bPrice: Number(p.b2b_price),
-          costPrice: Number(p.cost_price),
+          costPrice: 0,
           minStock: p.min_stock,
           maxStock: p.max_stock,
           isActive: p.is_active,
@@ -439,79 +439,17 @@ export default function LandingPage() {
 
     setIsSubmittingOrder(true);
     try {
-      // Generate order number
-      const now = new Date();
-      const year = now.getFullYear().toString().slice(-2);
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const day = String(now.getDate()).padStart(2, '0');
-      const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-      const orderNumber = `ORD-${year}${month}${day}-${random}`;
-
-      const orderData = {
-        order_number: orderNumber,
-        source: 'b2b',
-        status: 'pending',
-        client_id: user.uid,
-        client_name: userData?.name || 'Noma\'lum',
-        client_phone: userData?.phone || '',
-        client_address: clientAddress || '',
-        items: cartItems.map((item) => ({
-          product_id: item.productId,
-          product_name: item.productName,
-          sku: item.sku,
-          unit: item.unit,
-          quantity: item.quantity,
-          price: item.unitPrice,
-          total: item.totalPrice,
-        })),
-        total_amount: totalAmount,
-        notes: orderNotes,
-        order_date: new Date().toISOString().split('T')[0],
-      };
-
-      try {
-        await orderApi.create(orderData);
-      } catch (apiErr) {
-        logger.warn('REST buyurtma ishlamadi, Firestore ga yozilmoqda', {
-          detail: apiErr instanceof Error ? apiErr.message : String(apiErr),
-        });
-        const fsOrder: Omit<Order, 'id'> = {
-          orderNumber: generateOrderNumber(),
-          source: 'b2b',
-          status: 'pending',
-          clientId: user.uid,
-          clientName: userData?.name || userData?.companyName || 'Noma\'lum',
-          clientPhone: userData?.phone || '',
-          clientAddress: clientAddress || '',
-          items: cartItems.map((item) => ({
-            id: `${item.productId}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-            productId: item.productId,
-            productName: item.productName,
-            sku: item.sku,
-            unit: item.unit,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            discountPercent: item.discountPercent,
-            totalPrice: item.totalPrice,
-          })),
-          subtotal: totalAmount,
-          discountAmount: 0,
-          deliveryFee: 0,
-          totalAmount,
-          paidAmount: 0,
-          paymentStatus: 'pending',
-          notes: orderNotes,
-          orderDate: new Date().toISOString().split('T')[0],
-          createdBy: user.uid,
-          createdByName: userData?.name || 'B2B Mijoz',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        const fid = await orderService.create(fsOrder);
-        if (!fid) {
-          alert('Buyurtma Firestore ga yozilmadi. Firebase sozlanganini tekshiring.');
-          return;
-        }
+      const result = await submitB2BOrder({
+        user: { uid: user.uid },
+        userData,
+        items: cartItems,
+        totalAmount,
+        orderNotes,
+        clientAddress,
+      });
+      if (!result.ok) {
+        alert(result.error || 'Buyurtma yuborilmadi. Chiqib qayta kiring.');
+        return;
       }
 
       clearCart();

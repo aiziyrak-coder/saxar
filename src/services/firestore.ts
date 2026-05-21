@@ -5,6 +5,7 @@ import {
   getDoc,
   getDocs,
   addDoc,
+  setDoc,
   updateDoc,
   deleteDoc,
   query,
@@ -13,6 +14,7 @@ import {
   limit,
   startAfter,
   writeBatch,
+  runTransaction,
   type Firestore,
   type QueryConstraint,
   type DocumentData,
@@ -61,7 +63,7 @@ export class FirestoreService<T extends DocumentData> {
     };
 
     if (customId) {
-      await updateDoc(this.docRef(db, customId), dataWithTimestamps);
+      await setDoc(this.docRef(db, customId), dataWithTimestamps, { merge: true });
       return customId;
     } else {
       const docRef = await addDoc(this.collectionRef(db), dataWithTimestamps);
@@ -372,7 +374,17 @@ export async function getKPIByAgentAndPeriod(agentId: string, period: string): P
   return { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as KPIRecord;
 }
 
-/** FIFO chiqim: mahsulotdan eng avval yaroqlilik muddati tugaydigan partiyalardan chiqaradi. */
+/** Mahsulot bo‘yicha FIFO qoldig‘i yetarliligini tekshiradi (yozuvsiz). */
+export async function checkFifoAvailability(
+  productId: string,
+  quantity: number
+): Promise<boolean> {
+  const batches = await getInventoryByProduct(productId);
+  const available = batches.reduce((sum, b) => sum + (b.quantity || 0), 0);
+  return available >= quantity;
+}
+
+/** FIFO chiqim: tranzaksiya ichida — race condition va qisman yozuvlardan himoya. */
 export async function deductFIFO(
   productId: string,
   productName: string,
@@ -388,43 +400,69 @@ export async function deductFIFO(
   if (!db) {
     return { success: false, shortage: quantity };
   }
-  const batches = await getInventoryByProduct(productId);
-  let remaining = quantity;
-  const batch = writeBatch(db);
-  const now = new Date().toISOString();
 
-  for (const item of batches) {
-    if (remaining <= 0) break;
-    const take = Math.min(item.quantity, remaining);
-    if (take <= 0) continue;
-    remaining -= take;
-    const newQty = item.quantity - take;
-    batch.update(doc(db, 'inventory', item.id), {
-      quantity: newQty,
-      updatedAt: now,
+  const invQuery = query(
+    collection(db, 'inventory'),
+    where('productId', '==', productId),
+    where('status', '==', 'available'),
+    orderBy('expiryDate', 'asc')
+  );
+  const initialSnap = await getDocs(invQuery);
+  if (initialSnap.empty) {
+    return { success: false, shortage: quantity };
+  }
+
+  try {
+    return await runTransaction(db, async (transaction) => {
+      const freshSnaps = await Promise.all(
+        initialSnap.docs.map((d) => transaction.get(d.ref))
+      );
+      const batches = freshSnaps
+        .filter((snap) => snap.exists())
+        .map((snap) => ({ id: snap.id, ...snap.data() }) as InventoryItem)
+        .sort((a, b) => (a.expiryDate || '').localeCompare(b.expiryDate || ''));
+      let remaining = quantity;
+      const plan: { item: InventoryItem; take: number; newQty: number }[] = [];
+
+      for (const item of batches) {
+        if (remaining <= 0) break;
+        const take = Math.min(item.quantity, remaining);
+        if (take <= 0) continue;
+        remaining -= take;
+        plan.push({ item, take, newQty: item.quantity - take });
+      }
+
+      if (remaining > 0) {
+        return { success: false as const, shortage: remaining };
+      }
+
+      const now = new Date().toISOString();
+      for (const { item, take, newQty } of plan) {
+        transaction.update(doc(db, 'inventory', item.id), {
+          quantity: newQty,
+          updatedAt: now,
+        });
+        const txRef = doc(collection(db, 'inventory_transactions'));
+        const txData: Omit<InventoryTransaction, 'id'> = {
+          type: 'out',
+          productId,
+          productName,
+          batchNumber: item.batchNumber,
+          quantity: take,
+          unit: item.unit,
+          orderId,
+          referenceNumber: orderNumber,
+          createdBy,
+          createdByName,
+          createdAt: now,
+        };
+        transaction.set(txRef, txData);
+      }
+      return { success: true as const };
     });
-    const txData: Omit<InventoryTransaction, 'id'> = {
-      type: 'out',
-      productId,
-      productName,
-      batchNumber: item.batchNumber,
-      quantity: take,
-      unit: item.unit,
-      orderId,
-      referenceNumber: orderNumber,
-      createdBy,
-      createdByName,
-      createdAt: now,
-    };
-    const txRef = doc(collection(db, 'inventory_transactions'));
-    batch.set(txRef, txData);
+  } catch {
+    return { success: false, shortage: quantity };
   }
-
-  if (remaining > 0) {
-    return { success: false, shortage: remaining };
-  }
-  await batch.commit();
-  return { success: true };
 }
 
 /** Inventarizatsiya: mahsulot bo‘yicha qoldiqni tuzatish (bitta batch dan chiqarish yoki qo‘shish). */

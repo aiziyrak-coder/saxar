@@ -8,6 +8,7 @@ import { getClientBalance, getPaymentsByClient, getOrdersByClient } from '../../
 import { mapApiOrderRowToOrder, mapApiPaymentRowToPayment } from '../../services/b2bFromApi';
 import { logger } from '../../services/logger';
 import { addNotification } from '../../platform/notifications';
+import { startOnlinePayment } from '../../utils/featureActions';
 import type { Order, Payment } from '../../types';
 
 interface TrxRow {
@@ -34,18 +35,18 @@ function buildTrxRows(orders: Order[], payments: Payment[]): TrxRow[] {
     balance: 0,
   }));
   const combined = [...orderRows, ...paymentRows].sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-  ).slice(0, 50);
+    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+  );
   let run = 0;
   combined.forEach((t) => {
     run += t.amount;
     t.balance = run;
   });
-  return combined;
+  return combined.reverse().slice(0, 50);
 }
 
 export default function B2BFinance() {
-  const { user } = useAuth();
+  const { user, userData } = useAuth();
   const [balance, setBalance] = useState<number | null>(null);
   const [transactions, setTransactions] = useState<TrxRow[]>([]);
   const [lastPayment, setLastPayment] = useState<Payment | null>(null);
@@ -60,7 +61,15 @@ export default function B2BFinance() {
       return;
     }
     const uid = user.uid;
+    const djangoId = userData?.djangoUserId;
     let cancelled = false;
+
+    const matchApiClient = (clientId: string | number | undefined) => {
+      if (clientId == null) return false;
+      return djangoId != null
+        ? Number(clientId) === djangoId
+        : String(clientId) === uid;
+    };
 
     (async () => {
       try {
@@ -69,10 +78,10 @@ export default function B2BFinance() {
           paymentApi.getAll(),
         ]);
         const orders = orderRows
-          .filter((o) => String(o.client) === uid)
+          .filter((o) => matchApiClient(o.client))
           .map(mapApiOrderRowToOrder);
         const payments = paymentRows
-          .filter((p) => String(p.client) === uid)
+          .filter((p) => matchApiClient(p.client))
           .map(mapApiPaymentRowToPayment)
           .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         const totalOrders = orders.reduce((s, o) => s + o.totalAmount, 0);
@@ -111,7 +120,7 @@ export default function B2BFinance() {
     return () => {
       cancelled = true;
     };
-  }, [user?.uid]);
+  }, [user?.uid, userData?.djangoUserId]);
 
   const formatPrice = (n: number) => new Intl.NumberFormat('uz-UZ').format(n);
   const formatDate = (d: string) => new Date(d).toLocaleDateString('uz-UZ', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -164,7 +173,7 @@ export default function B2BFinance() {
                 variant="outline"
                 className="flex-1"
                 type="button"
-                onClick={() => addNotification('Payme', 'Payme integratsiyasi ulangandan keyin ishlaydi.')}
+                onClick={() => user?.uid && startOnlinePayment(Math.max(0, balance ?? 0), user.uid)}
               >
                 Payme
               </Button>
@@ -172,7 +181,7 @@ export default function B2BFinance() {
                 variant="outline"
                 className="flex-1"
                 type="button"
-                onClick={() => addNotification('Click', 'Click integratsiyasi ulangandan keyin ishlaydi.')}
+                onClick={() => user?.uid && startOnlinePayment(Math.max(0, balance ?? 0), user.uid)}
               >
                 Click
               </Button>
@@ -180,7 +189,7 @@ export default function B2BFinance() {
                 variant="outline"
                 className="flex-1"
                 type="button"
-                onClick={() => addNotification('Uzum Pay', 'Uzum Pay integratsiyasi ulangandan keyin ishlaydi.')}
+                onClick={() => user?.uid && startOnlinePayment(Math.max(0, balance ?? 0), user.uid)}
               >
                 Uzum Pay
               </Button>
@@ -189,7 +198,7 @@ export default function B2BFinance() {
               variant="primary"
               className="w-full"
               type="button"
-              onClick={() => addNotification('To’lov', 'Onlayn to’lov tizimi ulangandan keyin ishlaydi.')}
+              onClick={() => user?.uid && startOnlinePayment(Math.max(0, balance ?? 0), user.uid)}
             >
               To&apos;lovni amalga oshirish
             </Button>

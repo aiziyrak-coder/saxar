@@ -1,23 +1,33 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Package, CheckCircle2, AlertTriangle, FileText, Download } from 'lucide-react';
-import { addNotification, notifyPlannedFeature } from '../../platform/notifications';
+import { addNotification } from '../../platform/notifications';
+import { downloadCsv } from '../../platform/csv';
 import { useAuth } from '../../context/AuthContext';
-import { useFirestore } from '../../hooks/useFirestore';
+import { fetchDriverOrdersMerged } from '../../utils/mergedData';
 import type { Order } from '../../types';
 
 export default function DriverInventory() {
   const { userData } = useAuth();
   const driverUid = userData?.uid ?? '';
-  const { data: orders } = useFirestore<Order>('orders');
+  const [orders, setOrders] = useState<Order[]>([]);
+  useEffect(() => {
+    if (!driverUid) return;
+    void fetchDriverOrdersMerged(userData?.djangoUserId, driverUid).then(setOrders);
+  }, [driverUid, userData?.djangoUserId]);
 
   const todayStr = new Date().toISOString().split('T')[0];
 
   const inventory = useMemo(() => {
     const productMap: Record<string, { id: string; name: string; quantity: number; unit: string; status: 'ok' | 'warning' }> = {};
     orders
-      .filter(o => o.driverId === driverUid && ['confirmed', 'picking', 'packed', 'in_transit'].includes(o.status))
+      .filter(
+        (o) =>
+          (o.driverId === driverUid ||
+            o.driverId === String(userData?.djangoUserId ?? '')) &&
+          ['confirmed', 'picking', 'packed', 'in_transit'].includes(o.status)
+      )
       .forEach(order => {
         order.items.forEach(item => {
           const key = item.productId || item.productName;
@@ -50,7 +60,7 @@ export default function DriverInventory() {
         <h2 className="font-bold text-slate-800 flex items-center gap-2">
           <FileText className="h-5 w-5 text-emerald-600" /> Nakladnoy (Yuk xati)
         </h2>
-        <Button variant="outline" size="sm" className="gap-2 h-8 text-xs" type="button" onClick={() => notifyPlannedFeature('Nakladnoy PDF')}>
+        <Button variant="outline" size="sm" className="gap-2 h-8 text-xs" type="button" onClick={() => { downloadCsv(`nakladnoy-${Date.now()}.csv`, inventory.map(i => ({ mahsulot: i.name, miqdor: i.quantity }))); addNotification('Nakladnoy', 'CSV yuklandi (PDF printer orqali chop etishingiz mumkin).'); }}>
           <Download className="h-4 w-4" /> PDF
         </Button>
       </div>

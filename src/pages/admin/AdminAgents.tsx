@@ -1,13 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { where, type QueryConstraint } from 'firebase/firestore';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
 import { Users, MapPin, Target, TrendingUp, Loader2 } from 'lucide-react';
-import { notifyPlannedFeature, addNotification } from '../../platform/notifications';
+import { addNotification } from '../../platform/notifications';
+import { openLiveMap } from '../../utils/featureActions';
 import { useFirestore } from '../../hooks/useFirestore';
 import { userService } from '../../services/firestore';
+import { fetchAllOrdersMerged } from '../../utils/mergedData';
 import type { Client, Order, User } from '../../types';
 
 const REGIONS = [
@@ -21,7 +23,10 @@ const AGENT_CONSTRAINTS: QueryConstraint[] = [where('role', '==', 'agent')];
 export default function AdminAgents() {
   const { data: agentUsers, loading: agentsLoading, refresh: refreshAgents } = useFirestore<User>('users', AGENT_CONSTRAINTS);
   const { data: allClients } = useFirestore<Client>('clients');
-  const { data: allOrders } = useFirestore<Order>('orders');
+  const [allOrders, setAllOrders] = useState<Order[]>([]);
+  useEffect(() => {
+    void fetchAllOrdersMerged().then(setAllOrders);
+  }, []);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
@@ -179,7 +184,7 @@ export default function AdminAgents() {
                   size="sm"
                   className="flex-1"
                   type="button"
-                  onClick={() => notifyPlannedFeature('Agent savdo tarixi', agent.name)}
+                  onClick={() => window.location.href = `/admin/orders?agent=${encodeURIComponent(agent.id)}`}
                 >
                   Tarix
                 </Button>
@@ -188,7 +193,7 @@ export default function AdminAgents() {
                   size="sm"
                   className="flex-1"
                   type="button"
-                  onClick={() => notifyPlannedFeature('Agent xaritasi', agent.name)}
+                  onClick={() => openLiveMap()}
                 >
                   Xarita
                 </Button>

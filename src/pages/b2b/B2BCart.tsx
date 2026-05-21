@@ -5,14 +5,13 @@ import { Button } from '../../components/ui/Button';
 import { Trash2, Plus, Minus, ArrowRight, Package, ShoppingCart } from 'lucide-react';
 import { useCart } from '../../hooks/useCart';
 import { useAuth } from '../../context/AuthContext';
-import { orderService, generateOrderNumber } from '../../services/firestore';
 import { logAudit, AuditActions, EntityTypes } from '../../services/audit';
 import { Modal } from '../../components/ui/Modal';
 import { doc, getDoc } from 'firebase/firestore';
-import { tryGetFirebaseDb, isFirebaseConfigured } from '../../firebase';
-import type { Order } from '../../types';
+import { tryGetFirebaseDb } from '../../firebase';
 import { logger } from '../../services/logger';
 import { addNotification } from '../../platform/notifications';
+import { submitB2BOrder } from '../../utils/b2bOrderSubmit';
 
 export default function B2BCart() {
   const navigate = useNavigate();
@@ -36,55 +35,36 @@ export default function B2BCart() {
     if (!user || !userData || items.length === 0) return;
     if (isSubmitting) return;
 
+    if (userData.status === 'pending') {
+      addNotification('Buyurtma', 'Hisobingiz admin tasdig‘ini kutmoqda. Tasdiqlangach buyurtma berishingiz mumkin.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      if (!isFirebaseConfigured()) {
-        addNotification(
-          'Buyurtma',
-          'Firebase sozlanmaguncha buyurtma serverga yuborilmaydi. `firebase-applet-config.json` ni to‘ldiring yoki demo kirishdan foydalaning.'
-        );
-        return;
-      }
-      const order: Omit<Order, 'id'> = {
-        orderNumber: generateOrderNumber(),
-        source: 'b2b',
-        status: 'pending',
-        clientId: user.uid,
-        clientName: userData.name || userData.companyName || 'Noma\'lum',
-        clientPhone: userData.phone || '',
-        clientAddress: clientAddress || userData.address || '',
-        items: items.map(item => ({
-          id: `${item.productId}_${Date.now()}`,
-          productId: item.productId,
-          productName: item.productName,
-          sku: item.sku,
-          unit: item.unit,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          discountPercent: item.discountPercent,
-          totalPrice: item.totalPrice,
-        })),
-        subtotal: totalAmount,
-        discountAmount: 0,
-        deliveryFee: 0,
+      const result = await submitB2BOrder({
+        user,
+        userData,
+        items,
         totalAmount,
-        paidAmount: 0,
-        paymentStatus: 'pending',
-        notes: orderNotes,
-        orderDate: new Date().toISOString().split('T')[0],
-        createdBy: user.uid,
-        createdByName: userData.name || 'B2B Mijoz',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-
-      const orderId = await orderService.create(order);
-      if (!orderId) {
-        addNotification('Buyurtma', 'Firebase sozlanmagan yoki yozuv yaratilmadi.');
+        orderNotes,
+        clientAddress,
+      });
+      if (!result.ok) {
+        addNotification('Buyurtma', result.error || 'Buyurtma yuborilmadi. Chiqib qayta kiring.');
         return;
       }
       if (userData) {
-        await logAudit(AuditActions.ORDER_CREATE, EntityTypes.ORDER, orderId, user.uid, userData.name || '', userData.role, undefined, { orderNumber: order.orderNumber, totalAmount: order.totalAmount });
+        await logAudit(
+          AuditActions.ORDER_CREATE,
+          EntityTypes.ORDER,
+          result.orderId,
+          user.uid,
+          userData.name || '',
+          userData.role,
+          undefined,
+          { orderId: result.orderId, viaApi: result.viaApi, totalAmount }
+        );
       }
       clearCart();
       setShowConfirmModal(false);

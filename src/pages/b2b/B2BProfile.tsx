@@ -7,21 +7,30 @@ import {
   Package, ShoppingCart, Star, CreditCard, Clock, ChevronRight,
   Edit3, Camera, FileText, Settings, MapPinned, Wallet
 } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { hasDjangoJwt } from '../../services/djangoAuth';
 import { useAuth } from '../../context/AuthContext';
-import { useMemo, useState } from 'react';
-import { addNotification, notifyPlannedFeature } from '../../platform/notifications';
+import { useMemo, useState, useEffect } from 'react';
+import { addNotification } from '../../platform/notifications';
 import { useFirestore } from '../../hooks/useFirestore';
 import { userService } from '../../services/firestore';
+import { fetchClientOrdersMerged } from '../../utils/mergedData';
 import type { Client, Order, OrderStatus } from '../../types';
 
 export default function B2BProfile() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const pendingApproval = Boolean((location.state as { pendingApproval?: boolean })?.pendingApproval);
   const { userData, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
 
   const { data: clients } = useFirestore<Client>('clients');
-  const { data: orders } = useFirestore<Order>('orders');
+  const [orders, setOrders] = useState<Order[]>([]);
+
+  useEffect(() => {
+    if (!userData?.uid) return;
+    void fetchClientOrdersMerged(userData.uid, userData.djangoUserId).then(setOrders);
+  }, [userData?.uid, userData?.djangoUserId]);
 
   const clientProfile = useMemo(() => {
     if (!userData) return null;
@@ -36,11 +45,18 @@ export default function B2BProfile() {
   }, [clients, userData]);
 
   const myOrders = useMemo(() => {
-    if (!clientProfile) return [];
+    if (!userData) return [];
+    const clientKey = clientProfile?.id ?? userData.uid;
+    const djangoKey = userData.djangoUserId != null ? String(userData.djangoUserId) : '';
     return orders
-      .filter((o) => o.clientId === clientProfile.id)
+      .filter(
+        (o) =>
+          o.clientId === clientKey ||
+          o.clientId === userData.uid ||
+          (djangoKey && o.clientId === djangoKey)
+      )
       .sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
-  }, [orders, clientProfile]);
+  }, [orders, clientProfile, userData]);
 
   const stats = useMemo(() => {
     const totalOrders = myOrders.length;
@@ -88,6 +104,16 @@ export default function B2BProfile() {
 
   return (
     <div className="space-y-6 w-full max-w-7xl mx-auto">
+      {(pendingApproval || userData?.status === 'pending') && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900 text-sm">
+          Arizangiz admin tasdig‘ini kutmoqda. Tasdiqlangach <strong>chiqib qayta kiring</strong>, keyin katalog va buyurtma ochiladi.
+        </div>
+      )}
+      {userData?.status === 'active' && !hasDjangoJwt() && (
+        <div className="rounded-xl border border-blue-300 bg-blue-50 px-4 py-3 text-blue-900 text-sm">
+          Hisob tasdiqlangan, lekin server sessiyasi yo‘q. <button type="button" className="underline font-medium" onClick={() => { void logout().then(() => navigate('/login')); }}>Qayta kiring</button> (buyurtma uchun kerak).
+        </div>
+      )}
       {/* Header with Cover Image */}
       <div className="relative">
         <div className="h-32 md:h-48 bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 rounded-2xl"></div>
@@ -99,7 +125,14 @@ export default function B2BProfile() {
             <button
               type="button"
               className="absolute bottom-0 right-0 p-2 bg-emerald-500 text-white rounded-full shadow-md hover:bg-emerald-600 transition-colors"
-              onClick={() => notifyPlannedFeature('Kompaniya logotipi')}
+              onClick={() => {
+                const url = window.prompt('Logotip URL (ixtiyoriy):', '');
+                if (url && userData?.uid) {
+                  userService.update(userData.uid, { avatar: url }).then(() =>
+                    addNotification('Logotip', 'Rasm manzili saqlandi.')
+                  );
+                }
+              }}
             >
               <Camera className="h-4 w-4" />
             </button>
@@ -117,7 +150,7 @@ export default function B2BProfile() {
             variant="outline"
             className="bg-white/90 backdrop-blur-sm border-0 shadow-sm"
             type="button"
-            onClick={() => notifyPlannedFeature('Profilni tahrirlash')}
+            onClick={() => setActiveTab('settings')}
           >
             <Edit3 className="h-4 w-4 mr-2" /> Tahrirlash
           </Button>
@@ -339,7 +372,14 @@ export default function B2BProfile() {
                   variant="primary"
                   size="sm"
                   type="button"
-                  onClick={() => notifyPlannedFeature('Yangi yetkazib berish manzili')}
+                  onClick={() => {
+                    const addr = window.prompt('Yangi manzil:', '');
+                    if (addr?.trim() && userData?.uid) {
+                      userService.update(userData.uid, { address: addr.trim() }).then(() =>
+                        addNotification('Manzil', 'Yetkazish manzili yangilandi.')
+                      );
+                    }
+                  }}
                 >
                   Yangi manzil
                 </Button>
@@ -368,7 +408,14 @@ export default function B2BProfile() {
                           variant="outline"
                           size="sm"
                           type="button"
-                          onClick={() => notifyPlannedFeature('Manzilni tahrirlash', addr.name)}
+                          onClick={() => {
+                            const next = window.prompt('Manzilni tahrirlash:', addr.address);
+                            if (next?.trim() && userData?.uid) {
+                              userService.update(userData.uid, { address: next.trim() }).then(() =>
+                                addNotification('Manzil', `${addr.name} yangilandi.`)
+                              );
+                            }
+                          }}
                         >
                           Tahrirlash
                         </Button>

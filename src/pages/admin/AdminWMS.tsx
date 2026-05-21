@@ -7,7 +7,8 @@ import { Modal } from '../../components/ui/Modal';
 import { Search, Plus, AlertTriangle, Barcode, ArrowRightLeft, Package, Calendar } from 'lucide-react';
 import { useFirestore } from '../../hooks/useFirestore';
 import { inventoryService, generateBatchNumber } from '../../services/firestore';
-import { addNotification, notifyPlannedFeature } from '../../platform/notifications';
+import { addNotification } from '../../platform/notifications';
+import { promptBarcodeScan } from '../../utils/featureActions';
 import type { InventoryItem, Product } from '../../types';
 
 type WmsTabId = 'inventory' | 'transactions' | 'expiry';
@@ -119,7 +120,7 @@ export default function AdminWMS() {
             variant="outline"
             className="gap-2"
             type="button"
-            onClick={() => notifyPlannedFeature('Shtrix-kod skaner', 'USB/kamera skaner integratsiyasi rejada.')}
+            onClick={() => promptBarcodeScan((code) => addNotification('Skaner', `Kod: ${code}`))}
           >
             <Barcode className="h-4 w-4" /> Skanerlash
           </Button>
