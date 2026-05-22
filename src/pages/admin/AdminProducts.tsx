@@ -30,6 +30,8 @@ import { hasDjangoJwt } from '../../services/djangoAuth';
 import DjangoApiReconnect from '../../components/DjangoApiReconnect';
 import { syncProductToFirestore, removeProductFromFirestore } from '../../utils/productSync';
 import { logger } from '../../services/logger';
+import { ImageUpload } from '../../components/ui/ImageUpload';
+import { resolveMediaUrl } from '../../utils/mediaUrl';
 
 type Tab = 'products' | 'categories' | 'brands';
 
@@ -439,7 +441,7 @@ export default function AdminProducts() {
                     <tr key={String(p.id)} className="hover:bg-slate-50/80">
                       <td className="px-4 py-3">
                         {p.image ? (
-                          <img src={p.image} alt="" className="h-10 w-10 rounded object-cover border border-slate-200" />
+                          <img src={resolveMediaUrl(p.image)} alt="" className="h-10 w-10 rounded object-cover border border-slate-200" />
                         ) : (
                           <div className="h-10 w-10 rounded bg-slate-100 flex items-center justify-center">
                             <ImageIcon className="h-4 w-4 text-slate-400" />
@@ -496,7 +498,7 @@ export default function AdminProducts() {
                 <li key={String(c.id)} className="flex items-center justify-between py-3 px-2">
                   <div className="flex items-center gap-3">
                     {c.image ? (
-                      <img src={c.image} alt="" className="h-8 w-8 rounded object-cover" />
+                      <img src={resolveMediaUrl(c.image)} alt="" className="h-8 w-8 rounded object-cover" />
                     ) : (
                       <FolderTree className="h-5 w-5 text-slate-400" />
                     )}
@@ -620,15 +622,12 @@ export default function AdminProducts() {
           <Input label="Min zaxira" type="number" value={productForm.min_stock} onChange={(e) => setProductForm({ ...productForm, min_stock: e.target.value })} />
           <Input label="Max zaxira" type="number" value={productForm.max_stock} onChange={(e) => setProductForm({ ...productForm, max_stock: e.target.value })} />
           <div className="md:col-span-2">
-            <Input
-              label="Rasm URL"
-              placeholder="https://..."
+            <ImageUpload
+              label="Mahsulot rasmi"
+              folder="catalog"
               value={productForm.image}
-              onChange={(e) => setProductForm({ ...productForm, image: e.target.value })}
+              onChange={(image) => setProductForm({ ...productForm, image })}
             />
-            {productForm.image && (
-              <img src={productForm.image} alt="" className="mt-2 h-24 rounded-lg object-cover border" />
-            )}
           </div>
           <div className="md:col-span-2">
             <label className="block text-sm font-medium text-slate-700 mb-1">Tavsif</label>
@@ -658,7 +657,12 @@ export default function AdminProducts() {
       <Modal isOpen={categoryModal} onClose={() => setCategoryModal(false)} title={editingCategory ? 'Kategoriya' : 'Yangi kategoriya'}>
         <div className="space-y-3">
           <Input label="Nomi" value={categoryForm.name} onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })} />
-          <Input label="Rasm URL" value={categoryForm.image} onChange={(e) => setCategoryForm({ ...categoryForm, image: e.target.value })} />
+          <ImageUpload
+            label="Kategoriya rasmi"
+            folder="categories"
+            value={categoryForm.image}
+            onChange={(image) => setCategoryForm({ ...categoryForm, image })}
+          />
           <Input label="Tartib" type="number" value={categoryForm.sort_order} onChange={(e) => setCategoryForm({ ...categoryForm, sort_order: e.target.value })} />
           <textarea
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -680,7 +684,12 @@ export default function AdminProducts() {
       <Modal isOpen={brandModal} onClose={() => setBrandModal(false)} title={editingBrand ? 'Brend' : 'Yangi brend'}>
         <div className="space-y-3">
           <Input label="Nomi" value={brandForm.name} onChange={(e) => setBrandForm({ ...brandForm, name: e.target.value })} />
-          <Input label="Logo URL" value={brandForm.logo} onChange={(e) => setBrandForm({ ...brandForm, logo: e.target.value })} />
+          <ImageUpload
+            label="Brend logotipi"
+            folder="brands"
+            value={brandForm.logo}
+            onChange={(logo) => setBrandForm({ ...brandForm, logo })}
+          />
           <textarea
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             placeholder="Tavsif"

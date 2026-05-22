@@ -48,6 +48,7 @@ import { useAuth } from '../context/AuthContext';
 import { productApi, categoryApi } from '../services/api';
 import { submitB2BOrder } from '../utils/b2bOrderSubmit';
 import { logger } from '../services/logger';
+import { resolveMediaUrl } from '../utils/mediaUrl';
 import type { Category, Product } from '../types';
 import { BRAND, CONTACT, erpHomePathForRole } from '../constants/branding';
 import { fetchLandingPublicCopy } from '../services/landingSettings';
@@ -482,7 +483,7 @@ export default function LandingPage() {
         <div className="relative aspect-[4/5] bg-zinc-100 overflow-hidden sm:aspect-square">
           {product.images?.[0] ? (
             <img
-              src={product.images[0]}
+              src={resolveMediaUrl(product.images[0])}
               alt={product.name}
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
             />
@@ -997,7 +998,7 @@ export default function LandingPage() {
               <div className={`absolute inset-0 bg-gradient-to-r ${banner.bg}`} />
               <div className="absolute inset-0 bg-slate-900/20" />
               <img
-                src={banner.image}
+                src={resolveMediaUrl(banner.image)}
                 alt={banner.title}
                 className="w-full h-full object-cover opacity-40"
               />
@@ -1552,7 +1553,7 @@ export default function LandingPage() {
                     >
                       <div className="w-12 h-12 rounded bg-white border border-slate-100 overflow-hidden shrink-0">
                         {item.image ? (
-                          <img src={item.image} alt={item.productName} className="w-full h-full object-cover" />
+                          <img src={resolveMediaUrl(item.image)} alt={item.productName} className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
                             <Package className="h-5 w-5 text-slate-200" />

@@ -9,9 +9,11 @@ import {
 } from 'lucide-react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { hasDjangoJwt } from '../../services/djangoAuth';
-import { useAuth } from '../../context/AuthContext';
-import { useMemo, useState, useEffect } from 'react';
+import { uploadImageFile } from '../../services/uploadApi';
+import { resolveMediaUrl } from '../../utils/mediaUrl';
 import { addNotification } from '../../platform/notifications';
+import { useAuth } from '../../context/AuthContext';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { useFirestore } from '../../hooks/useFirestore';
 import { userService } from '../../services/firestore';
 import { fetchClientOrdersMerged } from '../../utils/mergedData';
@@ -22,6 +24,8 @@ export default function B2BProfile() {
   const location = useLocation();
   const pendingApproval = Boolean((location.state as { pendingApproval?: boolean })?.pendingApproval);
   const { userData, logout } = useAuth();
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
 
   const { data: clients } = useFirestore<Client>('clients');
@@ -119,22 +123,53 @@ export default function B2BProfile() {
         <div className="h-32 md:h-48 bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 rounded-2xl"></div>
         <div className="absolute -bottom-12 left-6 md:left-10 flex items-end">
           <div className="relative">
-            <div className="h-24 w-24 md:h-32 md:w-32 bg-white rounded-2xl flex items-center justify-center border-4 border-white shadow-lg">
-              <Building2 className="h-12 w-12 md:h-16 md:w-16 text-emerald-600" />
+            <div className="h-24 w-24 md:h-32 md:w-32 bg-white rounded-2xl flex items-center justify-center border-4 border-white shadow-lg overflow-hidden">
+              {userData?.avatar ? (
+                <img
+                  src={resolveMediaUrl(userData.avatar)}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <Building2 className="h-12 w-12 md:h-16 md:w-16 text-emerald-600" />
+              )}
             </div>
-            <button
-              type="button"
-              className="absolute bottom-0 right-0 p-2 bg-emerald-500 text-white rounded-full shadow-md hover:bg-emerald-600 transition-colors"
-              onClick={() => {
-                const url = window.prompt('Logotip URL (ixtiyoriy):', '');
-                if (url && userData?.uid) {
-                  userService.update(userData.uid, { avatar: url }).then(() =>
-                    addNotification('Logotip', 'Rasm manzili saqlandi.')
-                  );
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file || !userData?.uid) return;
+                if (!hasDjangoJwt()) {
+                  addNotification('Rasm', 'Avval tizimga qayta kiring (buyurtma uchun JWT kerak).');
+                  return;
+                }
+                setAvatarUploading(true);
+                try {
+                  const { url } = await uploadImageFile(file, 'avatars');
+                  await userService.update(userData.uid, { avatar: url });
+                  addNotification('Logotip', 'Rasm yuklandi.');
+                } catch (err) {
+                  addNotification('Xatolik', err instanceof Error ? err.message : 'Yuklanmadi');
+                } finally {
+                  setAvatarUploading(false);
+                  e.target.value = '';
                 }
               }}
+            />
+            <button
+              type="button"
+              disabled={avatarUploading}
+              className="absolute bottom-0 right-0 p-2 bg-emerald-500 text-white rounded-full shadow-md hover:bg-emerald-600 transition-colors disabled:opacity-60"
+              onClick={() => avatarInputRef.current?.click()}
             >
-              <Camera className="h-4 w-4" />
+              {avatarUploading ? (
+                <span className="block h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Camera className="h-4 w-4" />
+              )}
             </button>
           </div>
           <div className="ml-4 mb-2">

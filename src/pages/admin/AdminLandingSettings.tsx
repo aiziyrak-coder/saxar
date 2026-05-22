@@ -14,6 +14,8 @@ import {
   getDefaultLandingPublicCopy,
   type LandingPublicCopy,
 } from '../../types/landingPublic';
+import { ImageUpload } from '../../components/ui/ImageUpload';
+import { resolveMediaUrl } from '../../utils/mediaUrl';
 
 const BANNER_LABELS = ['1-slayd', '2-slayd', '3-slayd', '4-slayd'] as const;
 const FEATURE_LABELS = ['Ishlab chiqarish', 'Yetkazish', 'B2B', 'ERP kartochka'] as const;
@@ -181,13 +183,18 @@ export default function AdminLandingSettings() {
                   <Input label="Badge (kichik yorliq)" value={b.badge} onChange={(e) => setBannerField(i, 'badge', e.target.value)} />
                   <Input label="Gradient (bg klasslari)" value={b.bg} onChange={(e) => setBannerField(i, 'bg', e.target.value)} />
                   <div className="sm:col-span-2">
-                    <Input label="Rasm URL" value={b.image} onChange={(e) => setBannerField(i, 'image', e.target.value)} />
+                    <ImageUpload
+                      label="Slayd rasmi"
+                      folder="landing"
+                      value={b.image}
+                      onChange={(image) => setBannerField(i, 'image', image)}
+                    />
                   </div>
                 </div>
                 <div className="flex items-center gap-3 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900">
                   <div className={`h-16 w-28 shrink-0 bg-gradient-to-r ${b.bg}`} aria-hidden />
                   {b.image ? (
-                    <img src={b.image} alt="" className="h-16 max-w-[200px] object-cover" />
+                    <img src={resolveMediaUrl(b.image)} alt="" className="h-16 max-w-[200px] object-cover" />
                   ) : null}
                 </div>
               </div>

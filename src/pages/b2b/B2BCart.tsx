@@ -12,6 +12,7 @@ import { tryGetFirebaseDb } from '../../firebase';
 import { logger } from '../../services/logger';
 import { addNotification } from '../../platform/notifications';
 import { submitB2BOrder } from '../../utils/b2bOrderSubmit';
+import { resolveMediaUrl } from '../../utils/mediaUrl';
 
 export default function B2BCart() {
   const navigate = useNavigate();
@@ -113,7 +114,7 @@ export default function B2BCart() {
             <Card key={item.productId} className="flex flex-col sm:flex-row items-center gap-6 p-4">
               <div className="w-24 h-24 bg-slate-100 rounded-lg flex items-center justify-center">
                 {item.image ? (
-                  <img src={item.image} alt={item.productName} className="w-full h-full object-cover rounded-lg" />
+                  <img src={resolveMediaUrl(item.image)} alt={item.productName} className="w-full h-full object-cover rounded-lg" />
                 ) : (
                   <Package className="h-10 w-10 text-slate-300" />
                 )}

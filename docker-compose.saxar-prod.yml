@@ -56,6 +56,8 @@ services:
       start_period: 90s
     ports:
       - "127.0.0.1:18181:8000"
+    volumes:
+      - saxar_media_prod:/app/media
     networks:
       - saxar_internal
 
@@ -84,6 +86,7 @@ services:
 
 volumes:
   saxar_pgdata_prod:
+  saxar_media_prod:
 
 networks:
   saxar_internal:

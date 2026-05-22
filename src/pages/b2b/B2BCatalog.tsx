@@ -8,6 +8,7 @@ import { useCart } from '../../hooks/useCart';
 import { useAuth } from '../../context/AuthContext';
 import { productApi, categoryApi } from '../../services/api';
 import { logger } from '../../services/logger';
+import { resolveMediaUrl } from '../../utils/mediaUrl';
 import type { Product, Category } from '../../types';
 
 export default function B2BCatalog() {
@@ -179,7 +180,7 @@ export default function B2BCatalog() {
                 <div className="relative h-48 bg-slate-100">
                   {product.images?.[0] ? (
                     <img
-                      src={product.images?.[0]}
+                      src={resolveMediaUrl(product.images?.[0])}
                       alt={product.name}
                       className="w-full h-full object-cover"
                     />
