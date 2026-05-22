@@ -203,13 +203,11 @@ class ApiService {
       }
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const errorData = (await response.json().catch(() => ({}))) as Record<string, unknown>;
         throw new ApiError(
-          (errorData.detail as string) ||
-            (errorData.message as string) ||
-            `HTTP ${response.status}`,
+          formatApiErrorMessage(errorData, response.status),
           response.status,
-          errorData as Record<string, unknown>
+          errorData
         );
       }
 
@@ -262,6 +260,22 @@ class ApiService {
   delete<T>(endpoint: string): Promise<T> {
     return this.request<T>(endpoint, { method: 'DELETE' });
   }
+}
+
+function formatApiErrorMessage(errorData: Record<string, unknown>, status: number): string {
+  const detail = errorData.detail;
+  if (typeof detail === 'string' && detail.trim()) return detail;
+  if (Array.isArray(detail)) return detail.map(String).join('; ');
+  const parts: string[] = [];
+  for (const [key, val] of Object.entries(errorData)) {
+    if (key === 'detail' || key === 'message') continue;
+    if (Array.isArray(val)) parts.push(`${key}: ${val.map(String).join(', ')}`);
+    else if (typeof val === 'string' && val.trim()) parts.push(`${key}: ${val}`);
+  }
+  if (parts.length) return parts.join('; ');
+  const msg = errorData.message;
+  if (typeof msg === 'string' && msg.trim()) return msg;
+  return `HTTP ${status}`;
 }
 
 // Custom API error class

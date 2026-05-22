@@ -267,7 +267,13 @@ export default function AdminProducts() {
       await loadAll();
       addNotification('Kategoriya', 'Saqlandi');
     } catch (e) {
-      addNotification('Xatolik', e instanceof Error ? e.message : 'Kategoriya saqlanmadi');
+      const msg =
+        e instanceof ApiError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : 'Kategoriya saqlanmadi';
+      addNotification('Xatolik', msg);
     } finally {
       setSaving(false);
     }

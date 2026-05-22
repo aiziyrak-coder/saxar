@@ -15,6 +15,10 @@ class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = "__all__"
+        extra_kwargs = {
+            "image": {"allow_blank": True, "required": False},
+            "description": {"allow_blank": True, "required": False},
+        }
 
 
 class BrandSerializer(serializers.ModelSerializer):

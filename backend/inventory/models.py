@@ -4,7 +4,7 @@ from django.db import models
 class Category(models.Model):
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
-    image = models.URLField(blank=True)
+    image = models.CharField(max_length=500, blank=True, help_text="Rasm yo‘li yoki URL (/media/... yoki https://)")
     parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='children')
     sort_order = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
@@ -20,7 +20,7 @@ class Category(models.Model):
 
 class Brand(models.Model):
     name = models.CharField(max_length=255)
-    logo = models.URLField(blank=True)
+    logo = models.CharField(max_length=500, blank=True, help_text="Logo yo‘li yoki URL")
     description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -37,7 +37,7 @@ class Product(models.Model):
     sku = models.CharField(max_length=64, unique=True)
     barcode = models.CharField(max_length=64, blank=True)
     description = models.TextField(blank=True)
-    image = models.URLField(blank=True, help_text="Mahsulot rasmi (URL)")
+    image = models.CharField(max_length=500, blank=True, help_text="Mahsulot rasmi (/media/... yoki URL)")
     unit = models.CharField(max_length=16, default="kg")
     weight = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     category = models.ForeignKey(Category, on_delete=models.PROTECT, related_name='products')
