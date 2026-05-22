@@ -281,9 +281,9 @@ $env:SAXAR_SSH_PASSWORD = "PAROL"
 python deploy/audit_production.py
 ```
 
-`remote_bootstrap.sh` oxirida `deploy/post_deploy_verify.sh` avtomatik ishlaydi (nginx, `:18180` SPA, `:18181` health, `https://saxar.uz/admin/workspace`).
+`remote_bootstrap.sh` oxirida `deploy/post_deploy_verify.sh` avtomatik ishlaydi (nginx, `:18180` SPA, `:18181` health, `https://saxar.uz/admin/dashboard`).
 
-**400 `/admin/workspace`:** so‘rov Django API ga tushmasligi kerak — host nginx `location /` → `:18180`. `.env.saxar` da `DJANGO_ALLOWED_HOSTS` ichida `saxar.uz` bo‘lsin. `api.saxar.uz` uchun alohida cert bo‘lmasa — `api.saxar.uz.shared-with-saxar-cert.conf` (bootstrap avtomatik tanlaydi).
+**SPA admin yo‘llari:** `/admin/*` frontend `:18180` ga proksi qilinadi (Django API emas). `.env.saxar` da `DJANGO_ALLOWED_HOSTS` ichida `saxar.uz` bo‘lsin.
 
 ## 10a) Frontend: `Failed to fetch dynamically imported module` / assets 404
 

@@ -16,7 +16,6 @@ import {
   Sun,
   Star,
   Search,
-  Sparkles,
   LayoutTemplate,
   Boxes,
 } from 'lucide-react';
@@ -39,7 +38,6 @@ const ADMIN_NAV: { path: string; icon: typeof LayoutDashboard; label: string }[]
   { path: roleSubPath('admin', 'logistics'), icon: Truck, label: 'Logistika' },
   { path: roleSubPath('admin', 'finance'), icon: Wallet, label: 'Moliya & Buxgalteriya' },
   { path: roleSubPath('admin', 'reports'), icon: BarChart3, label: 'Hisobotlar' },
-  { path: roleSubPath('admin', 'workspace'), icon: Sparkles, label: 'Platform (20+)' },
   { path: roleSubPath('admin', 'landing-settings'), icon: LayoutTemplate, label: 'Bosh sahifa' },
   { path: roleSubPath('admin', 'settings'), icon: Settings, label: 'Sozlamalar' },
 ];

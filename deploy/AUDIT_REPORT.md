@@ -20,7 +20,7 @@
 
 ## Production (oldingi sessiya)
 
-- `https://saxar.uz/admin/workspace` → 200 (SPA).
+- `https://saxar.uz/admin/dashboard` → 200 (SPA).
 - Server `.env` da `saxar.uz` ALLOWED_HOSTS ga qo'shilgan.
 - Nginx `api.saxar.uz` shared SSL bilan reload qilingan.
 

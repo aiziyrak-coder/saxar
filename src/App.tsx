@@ -32,7 +32,6 @@ const AdminProduction = lazy(() => import('./pages/admin/AdminProduction'));
 const AdminAgents = lazy(() => import('./pages/admin/AdminAgents'));
 const AdminLogistics = lazy(() => import('./pages/admin/AdminLogistics'));
 const AdminProducts = lazy(() => import('./pages/admin/AdminProducts'));
-const AdminWorkspace = lazy(() => import('./pages/admin/AdminWorkspace'));
 
 // Lazy loaded B2B Pages
 const B2BCatalog = lazy(() => import('./pages/b2b/B2BCatalog'));
@@ -116,7 +115,6 @@ function AppRoutes() {
             <Route path="production" element={<Suspense fallback={<PageLoader />}><AdminProduction /></Suspense>} />
             <Route path="agents" element={<Suspense fallback={<PageLoader />}><AdminAgents /></Suspense>} />
             <Route path="logistics" element={<Suspense fallback={<PageLoader />}><AdminLogistics /></Suspense>} />
-            <Route path="workspace" element={<Suspense fallback={<PageLoader />}><AdminWorkspace /></Suspense>} />
           </Route>
         </Route>
 

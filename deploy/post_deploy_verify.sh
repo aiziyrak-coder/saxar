@@ -43,16 +43,16 @@ else
   fail "API health: ${HC:-empty}"
 fi
 
-FE=$(curl -fsS --max-time 5 -H "Host: saxar.uz" "http://127.0.0.1:18180/admin/workspace" 2>/dev/null | head -c 40 || true)
+FE=$(curl -fsS --max-time 5 -H "Host: saxar.uz" "http://127.0.0.1:18180/admin/dashboard" 2>/dev/null | head -c 40 || true)
 if echo "$FE" | grep -qi 'doctype'; then
-  ok "SPA /admin/workspace (18180)"
+  ok "SPA /admin/dashboard (18180)"
 else
-  fail "SPA /admin/workspace — HTML emas"
+  fail "SPA /admin/dashboard — HTML emas"
 fi
 
-API_ADMIN=$(curl -sI --max-time 5 -H "Host: saxar.uz" "http://127.0.0.1:18181/admin/workspace" 2>/dev/null | head -1 || true)
+API_ADMIN=$(curl -sI --max-time 5 -H "Host: saxar.uz" "http://127.0.0.1:18181/admin/dashboard" 2>/dev/null | head -1 || true)
 if echo "$API_ADMIN" | grep -q '400'; then
-  echo "INFO: API to'g'ridan-to'g'ri /admin/workspace ga 400 — nginx SPA ga yo'naltirishi kerak"
+  echo "INFO: API to'g'ridan-to'g'ri /admin/dashboard ga 400 — nginx SPA ga yo'naltirishi kerak"
 fi
 
 if [[ -f "${INSTALL_ROOT}/.env.saxar" ]]; then
@@ -63,12 +63,12 @@ if [[ -f "${INSTALL_ROOT}/.env.saxar" ]]; then
   fi
 fi
 
-if curl -fsS --max-time 8 -k "https://saxar.uz/admin/workspace" -o /dev/null 2>/dev/null; then
-  ok "https://saxar.uz/admin/workspace"
-elif curl -fsS --max-time 8 "http://saxar.uz/admin/workspace" -o /dev/null 2>/dev/null; then
-  ok "http://saxar.uz/admin/workspace"
+if curl -fsS --max-time 8 -k "https://saxar.uz/admin/dashboard" -o /dev/null 2>/dev/null; then
+  ok "https://saxar.uz/admin/dashboard"
+elif curl -fsS --max-time 8 "http://saxar.uz/admin/dashboard" -o /dev/null 2>/dev/null; then
+  ok "http://saxar.uz/admin/dashboard"
 else
-  fail "tashqi https://saxar.uz/admin/workspace"
+  fail "tashqi https://saxar.uz/admin/dashboard"
 fi
 
 if [[ "$FAIL" -ne 0 ]]; then

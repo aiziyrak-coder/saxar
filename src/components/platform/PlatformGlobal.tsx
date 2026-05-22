@@ -6,7 +6,6 @@ import { IdleSessionDialog } from './IdleSessionDialog';
 import { OfflineStrip } from './OfflineStrip';
 import { useIdleSession } from '../../platform/useIdleSession';
 import { useOnlineStatus } from '../../platform/useOnlineStatus';
-import { recordPageView } from '../../platform/localAnalytics';
 import { ROLE_HOME_PATHS, roleSubPath } from '../../constants/roles';
 
 const ADMIN_COMMANDS: CommandItem[] = [
@@ -27,7 +26,6 @@ const ADMIN_COMMANDS: CommandItem[] = [
   { id: 'p', label: 'Ishlab chiqarish', path: roleSubPath('admin', 'production') },
   { id: 'a', label: 'Agentlar', path: roleSubPath('admin', 'agents') },
   { id: 'l', label: 'Logistika', path: roleSubPath('admin', 'logistics') },
-  { id: 'x', label: 'Platform vositalari (20+)', path: roleSubPath('admin', 'workspace'), keywords: 'funksiya' },
 ];
 
 import { platformPublicApi } from '../../services/platformApi';
@@ -54,10 +52,6 @@ export function PlatformGlobal() {
   }, []);
   const [cmdOpen, setCmdOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
-
-  useEffect(() => {
-    if (location.pathname.startsWith(ROLE_HOME_PATHS.admin)) recordPageView(location.pathname);
-  }, [location.pathname]);
 
   useEffect(() => {
     try {

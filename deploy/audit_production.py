@@ -41,11 +41,11 @@ echo ""
 echo "=== ALLOWED_HOSTS (container) ==="
 docker exec saxar-api-1 printenv DJANGO_ALLOWED_HOSTS 2>/dev/null || echo missing
 echo ""
-echo "=== SPA /admin/workspace (frontend port) ==="
-curl -sI -H 'Host: saxar.uz' http://127.0.0.1:18180/admin/workspace | head -3
+echo "=== SPA /admin/dashboard (frontend port) ==="
+curl -sI -H 'Host: saxar.uz' http://127.0.0.1:18180/admin/dashboard | head -3
 echo ""
 echo "=== Public HTTPS ==="
-curl -sI --max-time 8 https://saxar.uz/admin/workspace 2>&1 | head -6
+curl -sI --max-time 8 https://saxar.uz/admin/dashboard 2>&1 | head -6
 curl -sI --max-time 8 https://saxar.uz/api/health/ 2>&1 | head -6
 echo ""
 echo "=== nginx -t ==="
