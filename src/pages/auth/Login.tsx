@@ -10,10 +10,11 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import {
   BRAND,
   isDemoLoginUiAllowed,
-  isDemoRoleQuickLoginUiAllowed,
+  shouldShowRoleLoginPanel,
   persistDemoUser,
 } from '../../constants/branding';
 import { DEV_ROLE_ORDER, DEV_ROLE_PHONE_CREDENTIALS } from '../../constants/devRoleLogins';
+import { completeDemoRoleLogin, findDevCredentialsByPhone } from '../../utils/demoRoleLogin';
 import { logger } from '../../services/logger';
 import type { UserRole } from '../../types';
 import { parseUserRole, ROLE_HOME_PATHS } from '../../constants/roles';
@@ -55,8 +56,24 @@ export default function Login() {
     }
     try {
       if (!isFirebaseConfigured()) {
+        const matched = findDevCredentialsByPhone(phone.trim());
+        if (matched) {
+          const usePwd = pwd || matched.creds.password;
+          const result = await completeDemoRoleLogin(matched.role, {
+            ...matched.creds,
+            password: usePwd,
+          });
+          if (!result.ok) setError(result.error || 'Kirish amalga oshmadi');
+          return;
+        }
+        if (shouldShowRoleLoginPanel()) {
+          setError(
+            'Telefon ro‘yxatdagi demo raqamlardan biri bo‘lishi kerak. Quyidagi rol tugmasini bosing yoki telefon/parolni nusxalang.'
+          );
+          return;
+        }
         if (!isDemoLoginUiAllowed()) {
-          setError('Autentifikatsiya serveri sozlanmagan. Administrator bilan bog‘laning.');
+          setError('Autentifikatsiya serveri sozlanmagan. Quyidagi rol tugmalaridan foydalaning.');
           return;
         }
         persistDemoUser(
@@ -145,8 +162,8 @@ export default function Login() {
   };
 
   const handleRoleQuickLogin = async (role: UserRole) => {
-    if (!isDemoRoleQuickLoginUiAllowed()) {
-      setError('Rol bo‘yicha tezkir kirish o‘chirilgan (.env: VITE_SHOW_DEMO_ROLE_LOGIN).');
+    if (!shouldShowRoleLoginPanel()) {
+      setError('Rol bo‘yicha tezkir kirish o‘chirilgan (.env: VITE_SHOW_DEMO_ROLE_LOGIN=true).');
       return;
     }
     const creds = DEV_ROLE_PHONE_CREDENTIALS[role];
@@ -157,19 +174,8 @@ export default function Login() {
     setError('');
     try {
       if (!isFirebaseConfigured()) {
-        persistDemoUser(
-          JSON.stringify({
-            uid: `demo_phone_${role}_${creds.phone.replace(/\D/g, '').slice(-4)}`,
-            email: makeSyntheticEmail(creds.phone),
-            phone: creds.phone,
-            role,
-            name: creds.displayName,
-            status: 'active',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          })
-        );
-        window.location.href = ROLE_HOME_PATHS[role];
+        const result = await completeDemoRoleLogin(role, creds);
+        if (!result.ok) setError(result.error || 'Kirish amalga oshmadi');
         return;
       }
 
@@ -225,19 +231,8 @@ export default function Login() {
       }
 
       if (isOpNotAllowed || invalid || apiKeyBad) {
-        persistDemoUser(
-          JSON.stringify({
-            uid: `demo_phone_${role}_${creds.phone.replace(/\D/g, '').slice(-4)}`,
-            email: makeSyntheticEmail(creds.phone),
-            phone: creds.phone,
-            role,
-            name: creds.displayName,
-            status: 'active',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          })
-        );
-        window.location.href = ROLE_HOME_PATHS[role];
+        const result = await completeDemoRoleLogin(role, creds);
+        if (!result.ok) setError(result.error || 'Kirish amalga oshmadi');
         return;
       }
 
@@ -281,7 +276,13 @@ export default function Login() {
           {BRAND.erpProductName} — tizimga kirish
         </p>
 
-        {isDemoRoleQuickLoginUiAllowed() && (
+        {!isFirebaseConfigured() && (
+          <p className="mt-3 text-center text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            Firebase hozir ulanmagan — quyidagi demo akkauntlar orqali barcha rollarga kiring (Django API ham ishlatiladi).
+          </p>
+        )}
+
+        {shouldShowRoleLoginPanel() && (
           <div
             className={
               'mt-5 rounded-2xl border border-emerald-200/90 bg-emerald-50/95 p-4 shadow-md ' +

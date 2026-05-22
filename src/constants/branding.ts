@@ -1,4 +1,5 @@
 import type { UserRole } from '../types';
+import { isFirebaseConfigured } from '../firebase';
 import { ROLE_HOME_PATHS } from './roles';
 
 /** Rasmiy sayt va kompaniya nomi */
@@ -82,4 +83,10 @@ export function isDemoRoleQuickLoginUiAllowed(): boolean {
   if (raw === 'true' || raw === '1' || raw === 'yes') return true;
   if (raw === 'false' || raw === '0' || raw === 'no') return false;
   return isDemoLoginUiAllowed();
+}
+
+/** Firebase sozlanmagan bo‘lsa — barcha rollar uchun tezkir kirish paneli ko‘rinadi */
+export function shouldShowRoleLoginPanel(): boolean {
+  if (!isFirebaseConfigured()) return true;
+  return isDemoRoleQuickLoginUiAllowed();
 }
