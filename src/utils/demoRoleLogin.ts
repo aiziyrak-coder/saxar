@@ -1,8 +1,10 @@
 import { persistDemoUser } from '../constants/branding';
 import { DEV_ROLE_ORDER, DEV_ROLE_PHONE_CREDENTIALS } from '../constants/devRoleLogins';
 import { ROLE_HOME_PATHS } from '../constants/roles';
-import { obtainDjangoJwt, roleRequiresDjangoJwt } from '../services/djangoAuth';
+import { obtainDjangoJwtDetailed, roleRequiresDjangoJwt } from '../services/djangoAuth';
 import type { UserRole } from '../types';
+
+export const API_WARN_STORAGE_KEY = 'saxar_api_warn';
 
 function phoneDigits(raw: string): string {
   return raw.replace(/\D/g, '');
@@ -22,11 +24,11 @@ export function findDevCredentialsByPhone(rawPhone: string): {
   return null;
 }
 
-/** Firebase yo‘q yoki demo rejim: localStorage + Django JWT (API uchun). */
+/** Demo rol kirish: avval sessiya, keyin JWT (muvaffaqiyatsiz bo‘lsa ham kabinet ochiladi). */
 export async function completeDemoRoleLogin(
   role: UserRole,
   creds: { phone: string; password: string; displayName: string }
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; apiWarning?: string }> {
   const syntheticEmail = `${phoneDigits(creds.phone)}@saxar.local`;
   persistDemoUser(
     JSON.stringify({
@@ -35,24 +37,25 @@ export async function completeDemoRoleLogin(
       phone: creds.phone,
       role,
       name: creds.displayName,
-      status: role === 'b2b' ? 'active' : 'active',
+      status: 'active',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     })
   );
 
-  const jwt = await obtainDjangoJwt(creds.phone, creds.password);
-  if (roleRequiresDjangoJwt(role) && !jwt?.access) {
-    return {
-      ok: false,
-      error:
-        'Server API (Django) bilan bog‘lanmadi. Serverda `python manage.py ensure_role_users` ishga tushiring.',
-    };
-  }
-  if (role === 'b2b' && !jwt?.access) {
-    /* B2B ba’zi funksiyalar JWT siz ham ishlaydi */
+  const { pair, error: jwtError } = await obtainDjangoJwtDetailed(creds.phone, creds.password);
+  let apiWarning: string | undefined;
+  if (!pair?.access && roleRequiresDjangoJwt(role)) {
+    apiWarning =
+      jwtError ||
+      'API (Django) ulanmadi — kabinet ochildi, lekin buyurtma/mahsulot uchun serverda ensure_role_users kerak.';
+    try {
+      sessionStorage.setItem(API_WARN_STORAGE_KEY, apiWarning);
+    } catch {
+      /* ignore */
+    }
   }
 
-  window.location.href = ROLE_HOME_PATHS[role];
-  return { ok: true };
+  window.location.assign(ROLE_HOME_PATHS[role]);
+  return { ok: true, apiWarning };
 }

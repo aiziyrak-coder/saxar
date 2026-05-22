@@ -6,7 +6,7 @@ import { Input } from '../../components/ui/Input';
 import { Package, Phone, ArrowLeft, Lock, ShieldCheck } from 'lucide-react';
 import { getFirebaseAuth, tryGetFirebaseDb, isFirebaseConfigured } from '../../firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import {
   BRAND,
   isDemoLoginUiAllowed,
@@ -55,20 +55,21 @@ export default function Login() {
       return;
     }
     try {
+      const matched = findDevCredentialsByPhone(phone.trim());
+      if (matched) {
+        const usePwd = pwd || matched.creds.password;
+        const result = await completeDemoRoleLogin(matched.role, {
+          ...matched.creds,
+          password: usePwd,
+        });
+        if (!result.ok) setError(result.error || 'Kirish amalga oshmadi');
+        return;
+      }
+
       if (!isFirebaseConfigured()) {
-        const matched = findDevCredentialsByPhone(phone.trim());
-        if (matched) {
-          const usePwd = pwd || matched.creds.password;
-          const result = await completeDemoRoleLogin(matched.role, {
-            ...matched.creds,
-            password: usePwd,
-          });
-          if (!result.ok) setError(result.error || 'Kirish amalga oshmadi');
-          return;
-        }
         if (shouldShowRoleLoginPanel()) {
           setError(
-            'Telefon ro‘yxatdagi demo raqamlardan biri bo‘lishi kerak. Quyidagi rol tugmasini bosing yoki telefon/parolni nusxalang.'
+            'Telefon ro‘yxatdagi demo raqamlardan biri bo‘lishi kerak. Quyidagi rol tugmasini bosing.'
           );
           return;
         }
@@ -173,70 +174,10 @@ export default function Login() {
     setLoading(true);
     setError('');
     try {
-      if (!isFirebaseConfigured()) {
-        const result = await completeDemoRoleLogin(role, creds);
-        if (!result.ok) setError(result.error || 'Kirish amalga oshmadi');
-        return;
-      }
-
-      const syntheticEmail = makeSyntheticEmail(creds.phone);
-      const auth = getFirebaseAuth();
-      const credential = await signInWithEmailAndPassword(auth, syntheticEmail, creds.password);
-      const db = tryGetFirebaseDb();
-      if (!db) {
-        setError('Firestore mavjud emas. Konfiguratsiyani tekshiring.');
-        return;
-      }
-      const userDocRef = doc(db, 'users', credential.user.uid);
-      const userDoc = await getDoc(userDocRef);
-
-      if (!userDoc.exists()) {
-        await setDoc(userDocRef, {
-          uid: credential.user.uid,
-          email: syntheticEmail,
-          phone: creds.phone,
-          role,
-          name: creds.displayName,
-          createdAt: new Date().toISOString(),
-        });
-      }
-
-      const data = userDoc.exists() ? userDoc.data() : { role };
-      const effectiveRole = parseUserRole(data.role ?? role);
-      const jwt = await obtainDjangoJwt(creds.phone, creds.password);
-      if (roleRequiresDjangoJwt(effectiveRole) && !jwt) {
-        await signOut(auth);
-        setError('Server API bilan bog‘lanishda xatolik. Django parolini tekshiring.');
-        return;
-      }
-      navigate(ROLE_HOME_PATHS[effectiveRole]);
+      await completeDemoRoleLogin(role, creds);
     } catch (err) {
-      const fbErr = err as { message?: string; code?: string };
-      const msg = String(fbErr?.message || '');
-      const invalid =
-        fbErr?.code === 'auth/invalid-credential' ||
-        fbErr?.code === 'auth/wrong-password' ||
-        fbErr?.code === 'auth/user-not-found' ||
-        msg.includes('invalid-credential');
-      const isOpNotAllowed =
-        fbErr?.code === 'auth/operation-not-allowed' || msg.includes('operation-not-allowed');
-      const apiKeyBad =
-        fbErr?.code === 'auth/invalid-api-key' ||
-        (typeof fbErr?.code === 'string' && fbErr.code.includes('api-key')) ||
-        msg.toLowerCase().includes('api-key-not-valid') ||
-        msg.toLowerCase().includes('invalid-api-key');
-
-      if (!apiKeyBad && !isOpNotAllowed && !invalid) {
-        logger.error('Rol bilan tezkir kirish', err instanceof Error ? err : undefined);
-      }
-
-      if (isOpNotAllowed || invalid || apiKeyBad) {
-        const result = await completeDemoRoleLogin(role, creds);
-        if (!result.ok) setError(result.error || 'Kirish amalga oshmadi');
-        return;
-      }
-
-      setError(fbErr?.message || 'Kirish amalga oshmadi');
+      logger.error('Rol bilan tezkir kirish', err instanceof Error ? err : undefined);
+      setError(err instanceof Error ? err.message : 'Kirish amalga oshmadi');
     } finally {
       setLoading(false);
     }

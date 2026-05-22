@@ -1,4 +1,4 @@
-import { api, clearStoredAuthTokens, refreshStoredAccessToken } from './api';
+import { api, ApiError, clearStoredAuthTokens, refreshStoredAccessToken } from './api';
 import type { UserRole } from '../types';
 
 /** Django REST API talab qiladigan rollar */
@@ -31,7 +31,10 @@ export interface JwtPair {
 }
 
 /** Firebase kirishdan keyin Django JWT (Telegram, platform sozlamalari uchun). */
-export async function obtainDjangoJwt(phone: string, password: string): Promise<JwtPair | null> {
+export async function obtainDjangoJwtDetailed(
+  phone: string,
+  password: string
+): Promise<{ pair: JwtPair | null; error?: string }> {
   const username = phoneToUsername(phone);
   try {
     const data = await api.post<{ access: string; refresh: string }>('/accounts/auth/login/', {
@@ -41,13 +44,24 @@ export async function obtainDjangoJwt(phone: string, password: string): Promise<
     if (data.access) {
       localStorage.setItem('auth_token', data.access);
       localStorage.setItem('auth_refresh_token', data.refresh || '');
-      return { access: data.access, refresh: data.refresh };
+      return { pair: { access: data.access, refresh: data.refresh || '' } };
     }
-    return null;
+    return { pair: null, error: 'JWT javobida access yo‘q' };
   } catch (err) {
-    console.warn('Django JWT olinmadi', err);
-    return null;
+    const message =
+      err instanceof ApiError
+        ? err.message
+        : err instanceof Error
+          ? err.message
+          : 'Tarmoq xatosi — API javob bermadi';
+    console.warn('Django JWT olinmadi', message);
+    return { pair: null, error: message };
   }
+}
+
+export async function obtainDjangoJwt(phone: string, password: string): Promise<JwtPair | null> {
+  const { pair } = await obtainDjangoJwtDetailed(phone, password);
+  return pair;
 }
 
 export async function fetchDjangoMe(): Promise<DjangoMeDto | null> {

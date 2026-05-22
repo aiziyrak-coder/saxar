@@ -31,6 +31,8 @@ const ADMIN_COMMANDS: CommandItem[] = [
 ];
 
 import { platformPublicApi } from '../../services/platformApi';
+import { addNotification } from '../../platform/notifications';
+import { API_WARN_STORAGE_KEY } from '../../utils/demoRoleLogin';
 
 function idleMsFromMinutes(minutes: number): number {
   if (Number.isFinite(minutes) && minutes >= 5) return minutes * 60 * 1000;
@@ -56,6 +58,18 @@ export function PlatformGlobal() {
   useEffect(() => {
     if (location.pathname.startsWith(ROLE_HOME_PATHS.admin)) recordPageView(location.pathname);
   }, [location.pathname]);
+
+  useEffect(() => {
+    try {
+      const warn = sessionStorage.getItem(API_WARN_STORAGE_KEY);
+      if (warn) {
+        sessionStorage.removeItem(API_WARN_STORAGE_KEY);
+        addNotification('API ulanishi', warn);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

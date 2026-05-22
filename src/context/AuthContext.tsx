@@ -165,10 +165,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   useEffect(() => {
+    const demoUserEarly = readDemoUserFromStorage();
+    if (demoUserEarly?.uid.startsWith('demo_phone_')) {
+      void applyUserSession(demoUserEarly);
+      setLoading(false);
+      return;
+    }
+
     if (!isFirebaseConfigured()) {
-      const demoUser = readDemoUserFromStorage();
-      if (demoUser) {
-        void applyUserSession(demoUser);
+      if (demoUserEarly) {
+        void applyUserSession(demoUserEarly);
       } else {
         clearSession();
       }
