@@ -4,6 +4,7 @@ import {
   coerceBrowserFetchUrl,
   refreshStoredAccessToken,
 } from './api';
+import { normalizeMediaPath } from '../utils/mediaUrl';
 
 export type UploadFolder = 'catalog' | 'categories' | 'brands' | 'landing' | 'avatars';
 
@@ -51,5 +52,7 @@ export async function uploadImageFile(
     throw new Error(detail);
   }
 
-  return (await res.json()) as UploadImageResult;
+  const data = (await res.json()) as UploadImageResult;
+  const path = normalizeMediaPath(data.path || data.url);
+  return { url: path, path };
 }

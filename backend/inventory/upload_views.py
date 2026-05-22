@@ -1,3 +1,4 @@
+import os
 import uuid
 from pathlib import Path
 
@@ -20,6 +21,24 @@ EXT_BY_TYPE = {
     "image/webp": ".webp",
     "image/gif": ".gif",
 }
+
+
+def public_media_url(request, media_path: str) -> str:
+    """
+    Brauzer uchun ochiq URL.
+    Nginx `Host: api` bilan Django `https://api/media/...` bermasligi uchun
+    avval PUBLIC_SITE_URL yoki X-Forwarded-Host (saxar.uz), aks holda nisbiy yo‘l.
+    """
+    public_base = (os.getenv("PUBLIC_SITE_URL") or "").strip().rstrip("/")
+    if public_base:
+        return f"{public_base}{media_path}"
+
+    forwarded = (request.META.get("HTTP_X_FORWARDED_HOST") or "").split(",")[0].strip()
+    if forwarded and forwarded not in ("api", "api:8000") and not forwarded.startswith("api:"):
+        proto = (request.META.get("HTTP_X_FORWARDED_PROTO") or "https").split(",")[0].strip()
+        return f"{proto}://{forwarded}{media_path}"
+
+    return media_path
 
 
 class ImageUploadView(APIView):
@@ -60,5 +79,8 @@ class ImageUploadView(APIView):
         if not media_url.startswith("/"):
             media_url = f"/{media_url}"
 
-        absolute = request.build_absolute_uri(media_url)
-        return Response({"url": absolute, "path": media_url}, status=status.HTTP_201_CREATED)
+        # `path` — DB va frontend uchun; `url` — nisbiy yoki PUBLIC_SITE_URL bilan to‘liq
+        return Response(
+            {"url": public_media_url(request, media_url), "path": media_url},
+            status=status.HTTP_201_CREATED,
+        )
