@@ -285,6 +285,22 @@ python deploy/audit_production.py
 
 **400 `/admin/workspace`:** so‘rov Django API ga tushmasligi kerak — host nginx `location /` → `:18180`. `.env.saxar` da `DJANGO_ALLOWED_HOSTS` ichida `saxar.uz` bo‘lsin. `api.saxar.uz` uchun alohida cert bo‘lmasa — `api.saxar.uz.shared-with-saxar-cert.conf` (bootstrap avtomatik tanlaydi).
 
+## 10a) Frontend: `Failed to fetch dynamically imported module` / assets 404
+
+**Sabab:** brauzer eski `index-*.js` ni keshdan o‘qiydi, serverda esa yangi deploy — chunk fayllar (`AdminDashboard-....js`) boshqa hash bilan.
+
+**Tezkor yechim (foydalanuvchi):** `Ctrl+Shift+R` yoki DevTools → Application → Clear site data → saxar.uz.
+
+**Server (to‘liq frontend qayta yig‘ish):**
+
+```bash
+cd /opt/saxar && git pull && docker compose -f docker-compose.saxar-prod.yml --env-file .env.saxar build --no-cache web && docker compose -f docker-compose.saxar-prod.yml --env-file .env.saxar up -d --force-recreate web
+```
+
+Tekshiruv: `curl -sS https://saxar.uz/ | grep index-` — chiqadigan `index-....js` fayli serverdagi `docker compose ... exec web ls /usr/share/nginx/html/assets/index-*.js` bilan bir xil bo‘lishi kerak.
+
+Repodagi `nginx/frontend.conf` `index.html` uchun `no-cache` qo‘yadi — `web` konteynerini qayta build qiling.
+
 ## 11) Autentifikatsiya (faqat Django)
 
 Firebase olib tashlangan. Kirish va barcha ma’lumotlar Django REST API + JWT orqali. Demo rollar: `deploy/ROLE_LOGINS.md`, serverda `python manage.py ensure_role_users`.
