@@ -5,8 +5,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
 import { Users, Percent, Shield, Database, Bell, Plus, Loader2, Send } from 'lucide-react';
-import { useFirestore } from '../../hooks/useFirestore';
-import { promotionService } from '../../services/firestore';
+import { createPromotion, deletePromotion, listPromotions, updatePromotion } from '../../services/localPromotions';
 import type { Promotion } from '../../types';
 import { telegramApi, ApiError, type TelegramSettingsDto } from '../../services/api';
 import {
@@ -278,7 +277,17 @@ export default function AdminSettings() {
   const [creditTrusted, setCreditTrusted] = useState(50_000_000);
   const [pricingSaving, setPricingSaving] = useState(false);
 
-  const { data: promotions, loading: promoLoading, refresh: refreshPromos } = useFirestore<Promotion>('promotions');
+  const [promotions, setPromotions] = useState<Promotion[]>([]);
+  const [promoLoading, setPromoLoading] = useState(true);
+  const refreshPromos = useCallback(() => {
+    setPromoLoading(true);
+    setPromotions(listPromotions());
+    setPromoLoading(false);
+  }, []);
+
+  useEffect(() => {
+    refreshPromos();
+  }, [refreshPromos, activeTab]);
 
   useEffect(() => {
     if (!hasDjangoJwt()) return;
@@ -315,7 +324,7 @@ export default function AdminSettings() {
     try {
       const now = new Date().toISOString();
       const end = promoForm.endDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      await promotionService.create({
+      await createPromotion({
         name: promoForm.name.trim(),
         type: promoForm.type,
         value: promoForm.value,
@@ -326,12 +335,13 @@ export default function AdminSettings() {
         isActive: promoForm.isActive,
         createdAt: now,
         updatedAt: now,
-      } as Omit<Promotion, 'id'>);
+      });
       setShowPromoModal(false);
       setPromoForm({ name: '', type: 'percent', value: 0, buyQuantity: 10, getQuantity: 1, startDate: new Date().toISOString().split('T')[0], endDate: '', isActive: true });
       refreshPromos();
+      addNotification('Aksiya', 'Saqlandi (mahalliy katalog).');
     } catch (e) {
-      console.error(e);
+      addNotification('Xatolik', e instanceof Error ? e.message : 'Aksiya saqlanmadi');
     } finally {
       setSaving(false);
     }
@@ -339,11 +349,18 @@ export default function AdminSettings() {
 
   const togglePromoActive = async (p: Promotion) => {
     try {
-      await promotionService.update(p.id, { isActive: !p.isActive, updatedAt: new Date().toISOString() });
+      await updatePromotion(p.id, { isActive: !p.isActive, updatedAt: new Date().toISOString() });
       refreshPromos();
     } catch (e) {
-      console.error(e);
+      addNotification('Xatolik', 'Holat o‘zgartirilmadi');
     }
+  };
+
+  const handleDeletePromo = async (p: Promotion) => {
+    if (!window.confirm(`"${p.name}" aksiyasi o‘chirilsinmi?`)) return;
+    await deletePromotion(p.id);
+    refreshPromos();
+    addNotification('O‘chirildi', p.name);
   };
 
   return (
@@ -451,8 +468,11 @@ export default function AdminSettings() {
                               <span className={`px-2 py-1 text-xs font-bold rounded-full ${p.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
                                 {p.isActive ? 'Faol' : 'Nofaol'}
                               </span>
-                              <Button variant="ghost" size="sm" onClick={() => togglePromoActive(p)}>
-                                {p.isActive ? 'O‘chirish' : 'Yoqish'}
+                              <Button variant="ghost" size="sm" type="button" onClick={() => togglePromoActive(p)}>
+                                {p.isActive ? 'Nofaol' : 'Faol'}
+                              </Button>
+                              <Button variant="ghost" size="sm" type="button" className="text-red-600" onClick={() => handleDeletePromo(p)}>
+                                O‘chirish
                               </Button>
                             </div>
                           </div>

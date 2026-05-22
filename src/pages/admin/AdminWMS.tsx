@@ -4,7 +4,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
-import { Search, Plus, AlertTriangle, Barcode, ArrowRightLeft, Package, Calendar } from 'lucide-react';
+import { Search, Plus, AlertTriangle, Barcode, ArrowRightLeft, Package, Calendar, Trash2 } from 'lucide-react';
 import { useCatalogProducts } from '../../hooks/useCatalogProducts';
 import { inventoryBatchApi } from '../../services/api';
 import { hasDjangoJwt } from '../../services/djangoAuth';
@@ -107,6 +107,17 @@ export default function AdminWMS() {
     if (diffDays < 0) return { label: 'Muddati o\'tgan', color: 'text-red-600', bg: 'bg-red-50' };
     if (diffDays <= 7) return { label: `${diffDays} kun qoldi`, color: 'text-amber-600', bg: 'bg-amber-50' };
     return { label: 'Yaxshi', color: 'text-emerald-600', bg: 'bg-emerald-50' };
+  };
+
+  const handleDeleteBatch = async (item: InventoryItem) => {
+    if (!window.confirm(`Partiya ${item.batchNumber} o‘chirilsinmi?`)) return;
+    try {
+      await inventoryBatchApi.delete(item.id);
+      addNotification('O‘chirildi', item.batchNumber);
+      await refreshInventory();
+    } catch (e) {
+      addNotification('Xatolik', e instanceof ApiError ? e.message : 'O‘chirib bo‘lmadi');
+    }
   };
 
   const handleStockIn = async (data: StockInFormPayload) => {
@@ -368,18 +379,19 @@ export default function AdminWMS() {
                   <th className="py-3 px-6 font-semibold text-slate-600 text-sm uppercase tracking-wider">Ishlab chiqarilgan</th>
                   <th className="py-3 px-6 font-semibold text-slate-600 text-sm uppercase tracking-wider">Yaroqlilik muddati</th>
                   <th className="py-3 px-6 font-semibold text-slate-600 text-sm uppercase tracking-wider">Status</th>
+                  <th className="py-3 px-6 font-semibold text-slate-600 text-sm uppercase tracking-wider text-right">Amal</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {inventoryLoading ? (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center">
+                    <td colSpan={7} className="py-8 text-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 mx-auto"></div>
                     </td>
                   </tr>
                 ) : inventory.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-slate-500">
+                    <td colSpan={7} className="py-8 text-center text-slate-500">
                       Ma'lumot yo'q
                     </td>
                   </tr>
@@ -407,6 +419,11 @@ export default function AdminWMS() {
                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${expiryStatus.bg} ${expiryStatus.color}`}>
                               {expiryStatus.label}
                             </span>
+                          </td>
+                          <td className="py-4 px-6 text-right">
+                            <Button variant="ghost" size="sm" type="button" onClick={() => handleDeleteBatch(item)}>
+                              <Trash2 className="h-4 w-4 text-red-600" />
+                            </Button>
                           </td>
                         </tr>
                       );

@@ -84,6 +84,17 @@ export const djangoUsersApi = {
     address?: string;
     stir?: string;
   }) => api.post<DjangoUserRow>('/accounts/users/', data),
-  patch: (id: number, data: Partial<DjangoUserRow & { is_active: boolean }>) =>
-    api.patch<DjangoUserRow>(`/accounts/users/${id}/`, data),
+  patch: (
+    id: number,
+    data: Partial<
+      DjangoUserRow & {
+        is_active: boolean;
+        role: UserRole;
+        stir?: string;
+        company_name?: string;
+        region?: string;
+        address?: string;
+      }
+    >
+  ) => api.patch<DjangoUserRow>(`/accounts/users/${id}/`, data),
 };

@@ -3,7 +3,8 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
-import { Search, Plus, MapPin, Phone, Building2, CheckCircle2, AlertCircle, Loader2, XCircle, Download } from 'lucide-react';
+import { Search, Plus, MapPin, Phone, Building2, CheckCircle2, AlertCircle, Loader2, XCircle, Download, Pencil } from 'lucide-react';
+import { ApiError } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { djangoUsersApi } from '../../services/platformApi';
 import { hasDjangoJwt } from '../../services/djangoAuth';
@@ -30,6 +31,7 @@ export default function AdminClients() {
   const [balances, setBalances] = useState<Record<string, number>>({});
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [saving, setSaving] = useState(false);
   const [clientForm, setClientForm] = useState({
     name: '',
@@ -132,6 +134,9 @@ export default function AdminClients() {
         password,
         first_name: clientForm.name.trim(),
         company_name: clientForm.companyName.trim() || clientForm.name.trim(),
+        stir: clientForm.stir.trim(),
+        region: clientForm.region.trim(),
+        address: clientForm.address.trim(),
         is_active: true,
       });
       setShowCreateModal(false);
@@ -143,8 +148,60 @@ export default function AdminClients() {
       addNotification('Mijoz yaratildi', `${clientForm.name} muvaffaqiyatli saqlandi.`);
       fetchClients();
     } catch (e) {
-      console.error(e);
-      addNotification('Xatolik', 'Mijoz yaratishda xatolik yuz berdi.');
+      addNotification('Xatolik', e instanceof ApiError ? e.message : 'Mijoz yaratishda xatolik yuz berdi.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openEditClient = (client: Client) => {
+    setEditingClient(client);
+    setClientForm({
+      name: client.name,
+      ownerName: client.ownerName || '',
+      phone: client.phone || '',
+      stir: client.stir || '',
+      companyName: client.companyName || '',
+      address: client.address || '',
+      region: client.region || '',
+      paymentType: client.paymentType || 'cash',
+      creditLimit: client.creditLimit || 0,
+      creditDays: client.creditDays || 14,
+      discountPercent: client.discountPercent || 0,
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingClient) return;
+    const djangoId = djangoUserIdFromClientId(editingClient.id);
+    if (!djangoId || !hasDjangoJwt()) return;
+    setSaving(true);
+    try {
+      await djangoUsersApi.patch(djangoId, {
+        first_name: clientForm.name.trim(),
+        phone: clientForm.phone.trim(),
+        company_name: clientForm.companyName.trim() || clientForm.name.trim(),
+        stir: clientForm.stir.trim(),
+        region: clientForm.region.trim(),
+        address: clientForm.address.trim(),
+      });
+      if (userData) {
+        await logAudit(
+          AuditActions.CLIENT_UPDATE,
+          EntityTypes.CLIENT,
+          editingClient.id,
+          userData.uid,
+          userData.name || '',
+          userData.role,
+          { name: editingClient.name },
+          { name: clientForm.name }
+        );
+      }
+      addNotification('Saqlandi', `${clientForm.name} yangilandi.`);
+      setEditingClient(null);
+      await fetchClients();
+    } catch (e) {
+      addNotification('Xatolik', e instanceof ApiError ? e.message : 'Tahrirlashda xatolik.');
     } finally {
       setSaving(false);
     }
@@ -264,8 +321,14 @@ export default function AdminClients() {
                       </span>
                     </td>
                     <td className="py-4 px-6 text-right">
+                      <div className="flex gap-2 justify-end flex-wrap">
+                      {client.registrationStatus !== 'pending' && (
+                        <Button variant="outline" size="sm" type="button" onClick={() => openEditClient(client)}>
+                          <Pencil className="h-4 w-4" /> Tahrirlash
+                        </Button>
+                      )}
                       {client.registrationStatus === 'pending' && (
-                        <div className="flex gap-2 justify-end">
+                        <>
                           <Button
                             variant="outline"
                             size="sm"
@@ -285,8 +348,9 @@ export default function AdminClients() {
                             {actionLoading === client.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                             Tasdiqlash
                           </Button>
-                        </div>
+                        </>
                       )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -302,6 +366,36 @@ export default function AdminClients() {
           </table>
         </div>
       </Card>
+
+      <Modal
+        isOpen={!!editingClient}
+        onClose={() => !saving && setEditingClient(null)}
+        title="Mijozni tahrirlash"
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input placeholder="Do&apos;kon / korxona nomi *" value={clientForm.name} onChange={(e) => setClientForm(f => ({ ...f, name: e.target.value }))} />
+            <Input placeholder="Egasi (FIO)" value={clientForm.ownerName} onChange={(e) => setClientForm(f => ({ ...f, ownerName: e.target.value }))} />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input placeholder="Telefon *" value={clientForm.phone} onChange={(e) => setClientForm(f => ({ ...f, phone: e.target.value }))} />
+            <Input placeholder="STIR (INN)" value={clientForm.stir} onChange={(e) => setClientForm(f => ({ ...f, stir: e.target.value }))} />
+          </div>
+          <Input placeholder="Kompaniya nomi" value={clientForm.companyName} onChange={(e) => setClientForm(f => ({ ...f, companyName: e.target.value }))} />
+          <Input placeholder="Manzil" value={clientForm.address} onChange={(e) => setClientForm(f => ({ ...f, address: e.target.value }))} />
+          <select className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" value={clientForm.region} onChange={(e) => setClientForm(f => ({ ...f, region: e.target.value }))}>
+            <option value="">Hudud tanlang</option>
+            {REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+          </select>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button type="button" variant="outline" onClick={() => setEditingClient(null)} disabled={saving}>Bekor</Button>
+            <Button type="button" variant="primary" onClick={handleSaveEdit} disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Saqlash'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal isOpen={showCreateModal} onClose={() => !saving && setShowCreateModal(false)} title="Yangi mijoz" size="lg">
         <div className="space-y-4">

@@ -404,6 +404,7 @@ export const inventoryBatchApi = {
   create: (data: Record<string, unknown>) => api.post<ApiInventoryBatchRow>('/inventory-batches/', data),
   update: (id: string, data: Record<string, unknown>) =>
     api.patch<ApiInventoryBatchRow>(`/inventory-batches/${id}/`, data),
+  delete: (id: string) => api.delete<void>(`/inventory-batches/${id}/`),
 };
 
 export interface TelegramSettingsDto {

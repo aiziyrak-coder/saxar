@@ -3,7 +3,8 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
-import { Users, MapPin, Target, TrendingUp, Loader2 } from 'lucide-react';
+import { Users, MapPin, Target, TrendingUp, Loader2, Pencil } from 'lucide-react';
+import { ApiError } from '../../services/api';
 import { addNotification } from '../../platform/notifications';
 import { openLiveMap } from '../../utils/featureActions';
 import { djangoUsersApi } from '../../services/platformApi';
@@ -47,6 +48,7 @@ export default function AdminAgents() {
     void fetchAllOrdersMerged().then(setAllOrders);
   }, [refreshAgents]);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingAgent, setEditingAgent] = useState<User | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     name: '',
@@ -90,7 +92,7 @@ export default function AdminAgents() {
     });
   }, [agentUsers, allOrders, monthStart]);
 
-  const handleCreateAgent = async () => {
+  const handleSaveAgent = async () => {
     if (!form.name.trim() || !form.phone.trim()) return;
     if (!hasDjangoJwt()) {
       addNotification('Xato', 'Django API bilan kiring.');
@@ -100,22 +102,32 @@ export default function AdminAgents() {
     try {
       const phone = form.phone.trim();
       const email = form.email.trim() || `${phone.replace(/\D/g, '')}@saxar.local`;
-      await djangoUsersApi.create({
-        email,
-        phone,
-        role: 'agent',
-        password: `Saxar${phone.replace(/\D/g, '').slice(-6) || '123456'}`,
-        first_name: form.name.trim(),
-        region: form.region.trim() || undefined,
-        is_active: true,
-      });
-      setShowCreateModal(false);
+      if (editingAgent?.djangoUserId) {
+        await djangoUsersApi.patch(editingAgent.djangoUserId, {
+          first_name: form.name.trim(),
+          phone,
+          email,
+          region: form.region.trim() || undefined,
+        });
+        addNotification('Saqlandi', `${form.name} yangilandi.`);
+        setEditingAgent(null);
+      } else {
+        await djangoUsersApi.create({
+          email,
+          phone,
+          role: 'agent',
+          password: `Saxar${phone.replace(/\D/g, '').slice(-6) || '123456'}`,
+          first_name: form.name.trim(),
+          region: form.region.trim() || undefined,
+          is_active: true,
+        });
+        addNotification('Agent yaratildi', `${form.name} Django da saqlandi.`);
+        setShowCreateModal(false);
+      }
       setForm({ name: '', email: '', phone: '', region: '' });
-      addNotification('Agent yaratildi', `${form.name} Django da saqlandi.`);
       await refreshAgents();
     } catch (e) {
-      console.error(e);
-      addNotification('Xatolik', 'Agent yaratishda xatolik yuz berdi.');
+      addNotification('Xatolik', e instanceof ApiError ? e.message : 'Saqlashda xatolik.');
     } finally {
       setSaving(false);
     }
@@ -202,7 +214,26 @@ export default function AdminAgents() {
                 </div>
               </div>
 
-              <div className="mt-4 pt-4 border-t border-slate-100 flex gap-2">
+              <div className="mt-4 pt-4 border-t border-slate-100 flex gap-2 flex-wrap">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  type="button"
+                  onClick={() => {
+                    const u = agentUsers.find((x) => x.id === agent.id);
+                    if (u) {
+                      setEditingAgent(u);
+                      setForm({
+                        name: u.name,
+                        email: u.email || '',
+                        phone: u.phone || '',
+                        region: u.region || '',
+                      });
+                    }
+                  }}
+                >
+                  <Pencil className="h-3.5 w-3.5" /> Tahrirlash
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
@@ -229,7 +260,17 @@ export default function AdminAgents() {
         })}
       </div>
 
-      <Modal isOpen={showCreateModal} onClose={() => !saving && setShowCreateModal(false)} title="Yangi agent" size="md">
+      <Modal
+        isOpen={showCreateModal || !!editingAgent}
+        onClose={() => {
+          if (!saving) {
+            setShowCreateModal(false);
+            setEditingAgent(null);
+          }
+        }}
+        title={editingAgent ? 'Agentni tahrirlash' : 'Yangi agent'}
+        size="md"
+      >
         <div className="space-y-4">
           <Input
             placeholder="To&apos;liq ism *"
@@ -261,10 +302,18 @@ export default function AdminAgents() {
             </select>
           </div>
           <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" variant="outline" onClick={() => setShowCreateModal(false)} disabled={saving}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setShowCreateModal(false);
+                setEditingAgent(null);
+              }}
+              disabled={saving}
+            >
               Bekor qilish
             </Button>
-            <Button type="button" variant="primary" onClick={handleCreateAgent} disabled={saving || !form.name.trim() || !form.phone.trim()}>
+            <Button type="button" variant="primary" onClick={handleSaveAgent} disabled={saving || !form.name.trim() || !form.phone.trim()}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Saqlash
             </Button>

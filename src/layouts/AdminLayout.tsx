@@ -50,6 +50,7 @@ export default function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [notifOpen, setNotifOpen] = useState(false);
   const [favTick, setFavTick] = useState(0);
+  const [recentTick, setRecentTick] = useState(0);
   const unread = useUnreadNotificationCount();
 
   useEffect(() => {
@@ -77,6 +78,7 @@ export default function AdminLayout() {
   };
 
   const recent = getRecentRoutes();
+  void recentTick;
 
   return (
     <div className="min-h-screen bg-zinc-50 flex relative overflow-hidden text-zinc-800 dark:bg-slate-950 dark:text-slate-100">
@@ -143,7 +145,10 @@ export default function AdminLayout() {
               <button
                 type="button"
                 className="text-[10px] text-zinc-400 hover:text-zinc-600"
-                onClick={() => clearRecentRoutes()}
+                onClick={() => {
+                  clearRecentRoutes();
+                  setRecentTick((x) => x + 1);
+                }}
               >
                 Tozalash
               </button>

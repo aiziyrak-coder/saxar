@@ -153,6 +153,23 @@ export default function AdminOrders() {
     ));
   };
 
+  const handleDeleteOrder = async (order: Order) => {
+    if (!hasDjangoJwt()) return;
+    if (!window.confirm(`Buyurtma ${order.orderNumber || order.id} bekor qilib o‘chirilsinmi?`)) return;
+    setSaving(true);
+    try {
+      await orderApi.delete(String(order.id));
+      addNotification('O‘chirildi', order.orderNumber || order.id);
+      setDetail(null);
+      setDetailOrder(null);
+      await reloadApiOrders();
+    } catch (e) {
+      addNotification('Xatolik', e instanceof ApiError ? e.message : 'O‘chirib bo‘lmadi');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const patchOrderStatus = async (order: Order, status: Order['status']) => {
     setSaving(true);
     try {
@@ -461,16 +478,21 @@ export default function AdminOrders() {
                       disabled={saving || detailOrder.status === st}
                       onClick={() => void patchOrderStatus(detailOrder, st)}
                     >
-                      {st}
+                      {ORDER_STATUS_UZ[st]}
                     </Button>
                   )
                 )}
               </div>
             )}
-            <div className="flex gap-2 justify-end pt-2">
+            <div className="flex gap-2 justify-end pt-2 flex-wrap">
               <Button variant="outline" type="button" onClick={() => printOne(detail)}>
                 Chop etish
               </Button>
+              {detailOrder && (
+                <Button variant="danger" type="button" disabled={saving} onClick={() => void handleDeleteOrder(detailOrder)}>
+                  O‘chirish
+                </Button>
+              )}
               <Button
                 variant="primary"
                 type="button"

@@ -275,6 +275,34 @@ export default function AdminProducts() {
     }
   };
 
+  const deleteCategory = async (c: ApiCategory) => {
+    if (!window.confirm(`"${c.name}" kategoriyasi o‘chirilsinmi?`)) return;
+    setSaving(true);
+    try {
+      await categoryApi.delete(String(c.id));
+      addNotification('O‘chirildi', c.name);
+      await loadAll();
+    } catch (e) {
+      addNotification('Xatolik', e instanceof ApiError ? e.message : 'Kategoriya o‘chirilmadi');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteBrand = async (b: ApiBrand) => {
+    if (!window.confirm(`"${b.name}" brendi o‘chirilsinmi?`)) return;
+    setSaving(true);
+    try {
+      await brandApi.delete(String(b.id));
+      addNotification('O‘chirildi', b.name);
+      await loadAll();
+    } catch (e) {
+      addNotification('Xatolik', e instanceof ApiError ? e.message : 'Brend o‘chirilmadi');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const saveBrand = async () => {
     if (!brandForm.name.trim()) return;
     setSaving(true);
@@ -486,24 +514,29 @@ export default function AdminProducts() {
                     <span className="font-medium">{c.name}</span>
                     {!c.is_active && <Badge variant="neutral" size="sm">Nofaol</Badge>}
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    type="button"
-                    onClick={() => {
-                      setEditingCategory(c);
-                      setCategoryForm({
-                        name: c.name,
-                        description: c.description || '',
-                        image: c.image || '',
-                        sort_order: String(c.sort_order),
-                        is_active: c.is_active,
-                      });
-                      setCategoryModal(true);
-                    }}
-                  >
-                    Tahrirlash
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      type="button"
+                      onClick={() => {
+                        setEditingCategory(c);
+                        setCategoryForm({
+                          name: c.name,
+                          description: c.description || '',
+                          image: c.image || '',
+                          sort_order: String(c.sort_order),
+                          is_active: c.is_active,
+                        });
+                        setCategoryModal(true);
+                      }}
+                    >
+                      Tahrirlash
+                    </Button>
+                    <Button variant="outline" size="sm" type="button" onClick={() => deleteCategory(c)}>
+                      <Trash2 className="h-3.5 w-3.5 text-red-600" />
+                    </Button>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -524,23 +557,28 @@ export default function AdminProducts() {
                     <span className="font-medium">{b.name}</span>
                     {!b.is_active && <Badge variant="neutral" size="sm">Nofaol</Badge>}
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    type="button"
-                    onClick={() => {
-                      setEditingBrand(b);
-                      setBrandForm({
-                        name: b.name,
-                        logo: b.logo || '',
-                        description: b.description || '',
-                        is_active: b.is_active,
-                      });
-                      setBrandModal(true);
-                    }}
-                  >
-                    Tahrirlash
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      type="button"
+                      onClick={() => {
+                        setEditingBrand(b);
+                        setBrandForm({
+                          name: b.name,
+                          logo: b.logo || '',
+                          description: b.description || '',
+                          is_active: b.is_active,
+                        });
+                        setBrandModal(true);
+                      }}
+                    >
+                      Tahrirlash
+                    </Button>
+                    <Button variant="outline" size="sm" type="button" onClick={() => deleteBrand(b)}>
+                      <Trash2 className="h-3.5 w-3.5 text-red-600" />
+                    </Button>
+                  </div>
                 </li>
               ))}
             </ul>

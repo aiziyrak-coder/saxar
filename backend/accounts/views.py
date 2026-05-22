@@ -58,7 +58,17 @@ class AdminUserDetailView(generics.RetrieveUpdateAPIView):
             user.role = role
         if is_active is not None:
             user.is_active = bool(is_active)
-        for field in ("phone", "telegram_username", "first_name", "last_name", "email"):
+        for field in (
+            "phone",
+            "telegram_username",
+            "first_name",
+            "last_name",
+            "email",
+            "stir",
+            "company_name",
+            "region",
+            "address",
+        ):
             if field in request.data:
                 setattr(user, field, request.data[field])
         user.save()

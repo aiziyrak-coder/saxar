@@ -1,6 +1,29 @@
 import { auditLogService } from './firestore';
 import type { AuditLog, UserRole } from '../types';
 
+const AUDIT_KEY = 'saxar_audit_logs_v1';
+const MAX_LOGS = 200;
+
+export function readLocalAuditLogs(): AuditLog[] {
+  try {
+    const raw = localStorage.getItem(AUDIT_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as AuditLog[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function appendLocalAudit(entry: AuditLog): void {
+  try {
+    const logs = [entry, ...readLocalAuditLogs()].slice(0, MAX_LOGS);
+    localStorage.setItem(AUDIT_KEY, JSON.stringify(logs));
+  } catch {
+    /* ignore */
+  }
+}
+
 export async function logAudit(
   action: string,
   entityType: string,
@@ -11,20 +34,23 @@ export async function logAudit(
   oldData?: Record<string, unknown>,
   newData?: Record<string, unknown>
 ): Promise<void> {
+  const entry: AuditLog = {
+    id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    action,
+    entityType,
+    entityId,
+    userId,
+    userName,
+    userRole,
+    oldData: oldData ?? undefined,
+    newData: newData ?? undefined,
+    ipAddress: '',
+    userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+    createdAt: new Date().toISOString(),
+  };
+  appendLocalAudit(entry);
   try {
-    await auditLogService.create({
-      action,
-      entityType,
-      entityId,
-      userId,
-      userName,
-      userRole,
-      oldData: oldData || null,
-      newData: newData || null,
-      ipAddress: '', // Would be populated from server
-      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
-      createdAt: new Date().toISOString(),
-    } as Omit<AuditLog, 'id'>);
+    await auditLogService.create(entry as Omit<AuditLog, 'id'>);
   } catch (error) {
     console.error('Failed to log audit:', error);
   }

@@ -5,13 +5,12 @@ import { Input } from '../../../components/ui/Input';
 import { Modal } from '../../../components/ui/Modal';
 import { Badge } from '../../../components/ui/Badge';
 import { Loader2, Plus, Shield, Database, Bell, RefreshCw } from 'lucide-react';
-import { useFirestore } from '../../../hooks/useFirestore';
-import { userService } from '../../../services/firestore';
+import { readLocalAuditLogs } from '../../../services/audit';
 import { platformApi, djangoUsersApi, type PlatformSettingsDto, type DjangoUserRow } from '../../../services/platformApi';
 import { ApiError } from '../../../services/api';
 import { hasDjangoJwt } from '../../../services/djangoAuth';
 import { addNotification } from '../../../platform/notifications';
-import type { AuditLog, User, UserRole } from '../../../types';
+import type { AuditLog, UserRole } from '../../../types';
 
 const ROLES: { value: UserRole; label: string }[] = [
   { value: 'admin', label: 'Admin' },
@@ -37,11 +36,11 @@ function ApiAuthHint({ onRetry }: { onRetry?: () => void }) {
 }
 
 export function UsersRbacPanel() {
-  const { data: firestoreUsers, loading, refresh } = useFirestore<User>('users');
   const [djangoUsers, setDjangoUsers] = useState<DjangoUserRow[]>([]);
   const [djangoLoading, setDjangoLoading] = useState(false);
   const [djangoErr, setDjangoErr] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [editUser, setEditUser] = useState<DjangoUserRow | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ name: '', phone: '', email: '', role: 'agent' as UserRole, password: '' });
 
@@ -66,72 +65,104 @@ export function UsersRbacPanel() {
     loadDjango();
   }, [loadDjango]);
 
-  const handleCreateFirestore = async () => {
+  const handleSaveUser = async () => {
     if (!form.name.trim() || !form.phone.trim()) return;
+    if (!hasDjangoJwt()) {
+      addNotification('API', 'JWT kerak — qayta kiring.');
+      return;
+    }
     setSaving(true);
     try {
       const email = form.email.trim() || `${form.phone.replace(/\D/g, '')}@saxar.local`;
-      let djangoId: number | undefined;
-      if (hasDjangoJwt()) {
-        const dj = await djangoUsersApi.create({
+      if (editUser) {
+        await djangoUsersApi.patch(editUser.id, {
+          first_name: form.name.trim(),
+          phone: form.phone.trim(),
+          email,
+          role: form.role,
+        });
+        addNotification('Yangilandi', `${form.name} saqlandi.`);
+      } else {
+        await djangoUsersApi.create({
           email,
           phone: form.phone.trim(),
           role: form.role,
-          password: form.password || undefined,
+          password: form.password || `Saxar${form.phone.replace(/\D/g, '').slice(-6) || '123456'}`,
           first_name: form.name.trim(),
+          is_active: true,
         });
-        djangoId = dj.id;
-        await loadDjango();
+        addNotification('Foydalanuvchi', `${form.name} qo‘shildi.`);
       }
-      const uid = `user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      await userService.create({
-        uid,
-        djangoUserId: djangoId ?? null,
-        email,
-        phone: form.phone.trim(),
-        role: form.role,
-        name: form.name.trim(),
-        status: 'active',
-      } as Omit<User, 'id'>);
-      addNotification('Foydalanuvchi', `${form.name} qo‘shildi.`);
       setShowModal(false);
+      setEditUser(null);
       setForm({ name: '', phone: '', email: '', role: 'agent', password: '' });
-      refresh();
+      await loadDjango();
     } catch (e) {
-      addNotification('Xatolik', e instanceof Error ? e.message : 'Saqlashda xato');
+      addNotification('Xatolik', e instanceof ApiError ? e.message : 'Saqlashda xato');
     } finally {
       setSaving(false);
     }
   };
 
-  const toggleStatus = async (u: User) => {
-    if (!u.id) return;
-    const next = u.status === 'active' ? 'inactive' : 'active';
-    await userService.update(u.id, { status: next });
-    refresh();
+  const toggleStatus = async (u: DjangoUserRow) => {
+    if (!hasDjangoJwt()) return;
+    try {
+      await djangoUsersApi.patch(u.id, { is_active: u.is_active === false });
+      await loadDjango();
+      addNotification('Holat', u.is_active === false ? 'Faollashtirildi' : 'Bloklandi');
+    } catch (e) {
+      addNotification('Xatolik', e instanceof ApiError ? e.message : 'Holat o‘zgartirilmadi');
+    }
   };
 
-  const changeRole = async (u: User, role: UserRole) => {
-    if (!u.id) return;
-    await userService.update(u.id, { role });
-    refresh();
+  const changeRole = async (u: DjangoUserRow, role: UserRole) => {
+    if (!hasDjangoJwt()) return;
+    try {
+      await djangoUsersApi.patch(u.id, { role });
+      await loadDjango();
+    } catch (e) {
+      addNotification('Xatolik', e instanceof ApiError ? e.message : 'Rol o‘zgartirilmadi');
+    }
+  };
+
+  const openEdit = (u: DjangoUserRow) => {
+    setEditUser(u);
+    setForm({
+      name: u.first_name || u.username || '',
+      phone: u.phone || '',
+      email: u.email || '',
+      role: u.role as UserRole,
+      password: '',
+    });
+    setShowModal(true);
   };
 
   return (
     <Card className="p-6 space-y-6">
       <div className="flex flex-wrap justify-between items-center gap-2">
         <h3 className="text-lg font-bold text-slate-900">Foydalanuvchilar (RBAC)</h3>
-        <Button variant="primary" size="sm" className="gap-2" onClick={() => setShowModal(true)}>
+        <Button
+          variant="primary"
+          size="sm"
+          className="gap-2"
+          onClick={() => {
+            setEditUser(null);
+            setForm({ name: '', phone: '', email: '', role: 'agent', password: '' });
+            setShowModal(true);
+          }}
+        >
           <Plus className="h-4 w-4" /> Yangi foydalanuvchi
         </Button>
       </div>
 
       <p className="text-sm text-slate-600">
-        Firestore <code className="text-xs bg-slate-100 px-1 rounded">users</code> — kirish va rol; Django — Telegram va API
-        integratsiyasi.
+        Barcha foydalanuvchilar <strong>Django</strong> da saqlanadi — rol, bloklash va tahrirlash shu yerda ishlaydi.
       </p>
 
-      {loading ? (
+      {!hasDjangoJwt() && <ApiAuthHint onRetry={loadDjango} />}
+      {djangoErr && hasDjangoJwt() && <p className="text-sm text-red-600">{djangoErr}</p>}
+
+      {djangoLoading ? (
         <div className="flex gap-2 text-slate-500">
           <Loader2 className="h-4 w-4 animate-spin" /> Yuklanmoqda...
         </div>
@@ -140,6 +171,7 @@ export function UsersRbacPanel() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-left">
               <tr>
+                <th className="p-3">ID</th>
                 <th className="p-3">Ism</th>
                 <th className="p-3">Telefon</th>
                 <th className="p-3">Rol</th>
@@ -148,10 +180,11 @@ export function UsersRbacPanel() {
               </tr>
             </thead>
             <tbody>
-              {firestoreUsers.map((u) => (
-                <tr key={u.id ?? u.uid} className="border-t border-slate-100">
-                  <td className="p-3 font-medium">{u.name}</td>
-                  <td className="p-3">{u.phone}</td>
+              {djangoUsers.map((u) => (
+                <tr key={u.id} className="border-t border-slate-100">
+                  <td className="p-3 text-slate-500">#{u.id}</td>
+                  <td className="p-3 font-medium">{u.first_name || u.username}</td>
+                  <td className="p-3">{u.phone || '—'}</td>
                   <td className="p-3">
                     <select
                       className="border border-slate-200 rounded px-2 py-1 text-sm"
@@ -166,45 +199,37 @@ export function UsersRbacPanel() {
                     </select>
                   </td>
                   <td className="p-3">
-                    <Badge variant={u.status === 'active' ? 'success' : 'default'}>{u.status}</Badge>
+                    <Badge variant={u.is_active !== false ? 'success' : 'default'}>
+                      {u.is_active !== false ? 'active' : 'inactive'}
+                    </Badge>
                   </td>
-                  <td className="p-3">
+                  <td className="p-3 flex flex-wrap gap-1">
+                    <Button variant="ghost" size="sm" type="button" onClick={() => openEdit(u)}>
+                      Tahrirlash
+                    </Button>
                     <Button variant="ghost" size="sm" type="button" onClick={() => toggleStatus(u)}>
-                      {u.status === 'active' ? 'Bloklash' : 'Faollashtirish'}
+                      {u.is_active !== false ? 'Bloklash' : 'Faollashtirish'}
                     </Button>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {firestoreUsers.length === 0 && <p className="p-4 text-slate-500">Foydalanuvchilar yo‘q.</p>}
+          {djangoUsers.length === 0 && <p className="p-4 text-slate-500">Foydalanuvchilar yo‘q.</p>}
         </div>
       )}
 
-      <div className="border-t border-slate-100 pt-4">
-        <div className="flex items-center gap-2 mb-2">
-          <h4 className="font-medium text-slate-900">Django akkauntlar (Telegram ID)</h4>
-          <Button variant="outline" size="sm" type="button" onClick={loadDjango} disabled={djangoLoading}>
-            <RefreshCw className={`h-3 w-3 ${djangoLoading ? 'animate-spin' : ''}`} />
-          </Button>
-        </div>
-        {!hasDjangoJwt() && <ApiAuthHint />}
-        {djangoErr && hasDjangoJwt() && <p className="text-sm text-red-600">{djangoErr}</p>}
-        {djangoUsers.length > 0 && (
-          <div className="text-xs space-y-1 max-h-40 overflow-y-auto bg-slate-50 rounded p-2">
-            {djangoUsers.map((d) => (
-              <div key={d.id} className="flex justify-between gap-2">
-                <span>
-                  #{d.id} {d.first_name || d.username} — {d.role}
-                </span>
-                <span className="text-slate-500">{d.telegram_username ? `@${d.telegram_username}` : 'TG yo‘q'}</span>
-              </div>
-            ))}
-          </div>
-        )}
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" type="button" onClick={loadDjango} disabled={djangoLoading}>
+          <RefreshCw className={`h-3 w-3 ${djangoLoading ? 'animate-spin' : ''}`} /> Yangilash
+        </Button>
       </div>
 
-      <Modal isOpen={showModal} onClose={() => !saving && setShowModal(false)} title="Yangi foydalanuvchi">
+      <Modal
+        isOpen={showModal}
+        onClose={() => !saving && setShowModal(false)}
+        title={editUser ? 'Foydalanuvchini tahrirlash' : 'Yangi foydalanuvchi'}
+      >
         <div className="space-y-3">
           <Input label="Ism" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
           <Input label="Telefon" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} />
@@ -233,7 +258,7 @@ export function UsersRbacPanel() {
             <Button variant="outline" onClick={() => setShowModal(false)} disabled={saving}>
               Bekor
             </Button>
-            <Button variant="primary" onClick={handleCreateFirestore} disabled={saving}>
+            <Button variant="primary" onClick={handleSaveUser} disabled={saving}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Saqlash'}
             </Button>
           </div>
@@ -244,7 +269,13 @@ export function UsersRbacPanel() {
 }
 
 export function SecurityAuditPanel() {
-  const { data: logs, loading, refresh } = useFirestore<AuditLog>('audit_logs');
+  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [loading, setLoading] = useState(false);
+  const refresh = useCallback(() => {
+    setLoading(true);
+    setLogs(readLocalAuditLogs());
+    setLoading(false);
+  }, []);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [idleMin, setIdleMin] = useState(30);
@@ -266,7 +297,8 @@ export function SecurityAuditPanel() {
 
   useEffect(() => {
     load();
-  }, [load]);
+    refresh();
+  }, [load, refresh]);
 
   const save = async () => {
     if (!hasDjangoJwt()) return;
@@ -279,6 +311,7 @@ export function SecurityAuditPanel() {
       });
       addNotification('Xavfsizlik', 'Sozlamalar saqlandi.');
       await load();
+      refresh();
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : 'Saqlashda xato');
     } finally {

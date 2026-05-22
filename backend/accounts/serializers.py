@@ -72,6 +72,10 @@ class AdminUserCreateSerializer(serializers.ModelSerializer):
             "last_name",
             "is_active",
             "telegram_username",
+            "stir",
+            "company_name",
+            "region",
+            "address",
         ]
         read_only_fields = ["id"]
 
