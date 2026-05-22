@@ -27,6 +27,7 @@ import {
   type ApiBrand,
 } from '../../services/api';
 import { hasDjangoJwt } from '../../services/djangoAuth';
+import DjangoApiReconnect from '../../components/DjangoApiReconnect';
 import { syncProductToFirestore, removeProductFromFirestore } from '../../utils/productSync';
 import { logger } from '../../services/logger';
 
@@ -58,6 +59,7 @@ function formatMoney(n: number | string) {
 }
 
 export default function AdminProducts() {
+  const [apiLinked, setApiLinked] = useState(() => hasDjangoJwt());
   const [tab, setTab] = useState<Tab>('products');
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search, 300);
@@ -80,11 +82,24 @@ export default function AdminProducts() {
   const [editingBrand, setEditingBrand] = useState<ApiBrand | null>(null);
   const [brandForm, setBrandForm] = useState({ name: '', logo: '', description: '', is_active: true });
 
+  useEffect(() => {
+    const onRestored = () => setApiLinked(true);
+    const onExpired = () => setApiLinked(false);
+    window.addEventListener('auth:jwt-restored', onRestored);
+    window.addEventListener('auth:jwt-expired', onExpired);
+    return () => {
+      window.removeEventListener('auth:jwt-restored', onRestored);
+      window.removeEventListener('auth:jwt-expired', onExpired);
+    };
+  }, []);
+
   const loadAll = useCallback(async () => {
     if (!hasDjangoJwt()) {
+      setApiLinked(false);
       setLoading(false);
       return;
     }
+    setApiLinked(true);
     setLoading(true);
     try {
       const [p, c, b] = await Promise.all([
@@ -281,15 +296,15 @@ export default function AdminProducts() {
     }
   };
 
-  if (!hasDjangoJwt()) {
+  if (!apiLinked || !hasDjangoJwt()) {
     return (
-      <Card className="p-8 text-center">
-        <Package className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-        <h2 className="text-lg font-semibold text-slate-900 mb-2">Mahsulotlar boshqaruvi</h2>
-        <p className="text-slate-600 max-w-md mx-auto">
-          Katalog API uchun Django JWT kerak. Chiqib, qayta kiring (admin telefon + parol) — keyin bu sahifa ishlaydi.
-        </p>
-      </Card>
+      <DjangoApiReconnect
+        title="Mahsulotlar boshqaruvi"
+        onConnected={() => {
+          setApiLinked(true);
+          void loadAll();
+        }}
+      />
     );
   }
 

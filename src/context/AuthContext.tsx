@@ -12,8 +12,13 @@ import { getFirebaseAuth, tryGetFirebaseDb, isFirebaseConfigured } from '../fire
 import type { User, UserRole } from '../types';
 import { clearDemoUserStorage, readDemoUserRaw } from '../constants/branding';
 import { parseUserRole } from '../constants/roles';
-import { clearApiSession, clearStoredAuthTokens } from '../services/api';
-import { fetchDjangoMe, hasDjangoJwt } from '../services/djangoAuth';
+import { clearApiSessionAndSignOut, clearStoredAuthTokens } from '../services/api';
+import {
+  fetchDjangoMe,
+  hasDjangoJwt,
+  roleRequiresDjangoJwt,
+  tryRefreshDjangoJwt,
+} from '../services/djangoAuth';
 
 function parseUserStatus(value: unknown): User['status'] {
   if (value === 'active' || value === 'inactive' || value === 'pending') {
@@ -129,6 +134,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const applyUserSession = useCallback(async (nextUserData: User) => {
     let merged = nextUserData;
+    if (roleRequiresDjangoJwt(merged.role) && !hasDjangoJwt()) {
+      await tryRefreshDjangoJwt();
+    }
     if (hasDjangoJwt()) {
       const me = await fetchDjangoMe();
       if (me) {
@@ -206,6 +214,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [applyUserSession, clearSession]);
 
   useEffect(() => {
+    const onJwtExpired = () => {
+      clearStoredAuthTokens();
+    };
     const onSessionExpired = () => {
       clearStoredAuthTokens();
       if (isFirebaseConfigured()) {
@@ -215,12 +226,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       clearSession();
       setLoading(false);
     };
+    window.addEventListener('auth:jwt-expired', onJwtExpired);
     window.addEventListener('auth:session-expired', onSessionExpired);
-    return () => window.removeEventListener('auth:session-expired', onSessionExpired);
+    return () => {
+      window.removeEventListener('auth:jwt-expired', onJwtExpired);
+      window.removeEventListener('auth:session-expired', onSessionExpired);
+    };
   }, [clearSession]);
 
   const logout = useCallback(async () => {
-    clearApiSession();
+    clearApiSessionAndSignOut();
     if (isFirebaseConfigured()) {
       try {
         await firebaseSignOut(getFirebaseAuth());

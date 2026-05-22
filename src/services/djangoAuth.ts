@@ -1,4 +1,4 @@
-import { api, clearStoredAuthTokens } from './api';
+import { api, clearStoredAuthTokens, refreshStoredAccessToken } from './api';
 import type { UserRole } from '../types';
 
 /** Django REST API talab qiladigan rollar */
@@ -65,6 +65,16 @@ export function roleRequiresDjangoJwt(role: UserRole): boolean {
 
 export function hasDjangoJwt(): boolean {
   return Boolean(localStorage.getItem('auth_token'));
+}
+
+/** Refresh token bo‘lsa, chiqmasdan access JWT tiklash */
+export async function tryRefreshDjangoJwt(): Promise<boolean> {
+  if (hasDjangoJwt()) return true;
+  return refreshStoredAccessToken();
+}
+
+export function notifyDjangoJwtRestored(): void {
+  window.dispatchEvent(new CustomEvent('auth:jwt-restored'));
 }
 
 export async function ensureDjangoJwtForAdmin(phone: string, password: string): Promise<boolean> {

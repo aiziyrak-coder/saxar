@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { clearApiSession, clearStoredAuthTokens } from './api';
+import {
+  clearApiSession,
+  clearApiSessionAndSignOut,
+  clearStoredAuthTokens,
+} from './api';
 
 describe('api session helpers', () => {
   beforeEach(() => {
@@ -17,7 +21,7 @@ describe('api session helpers', () => {
     spy.mockRestore();
   });
 
-  it('clearApiSession clears tokens and dispatches auth:session-expired', () => {
+  it('clearApiSession clears tokens and dispatches auth:jwt-expired', () => {
     const spy = vi.spyOn(window, 'dispatchEvent');
     clearApiSession();
     expect(localStorage.getItem('auth_token')).toBeNull();
@@ -25,7 +29,14 @@ describe('api session helpers', () => {
     expect(spy).toHaveBeenCalled();
     const first = spy.mock.calls[0]?.[0];
     expect(first).toBeInstanceOf(CustomEvent);
-    expect((first as CustomEvent).type).toBe('auth:session-expired');
+    expect((first as CustomEvent).type).toBe('auth:jwt-expired');
+    spy.mockRestore();
+  });
+
+  it('clearApiSessionAndSignOut dispatches auth:session-expired', () => {
+    const spy = vi.spyOn(window, 'dispatchEvent');
+    clearApiSessionAndSignOut();
+    expect((spy.mock.calls[0]?.[0] as CustomEvent).type).toBe('auth:session-expired');
     spy.mockRestore();
   });
 });

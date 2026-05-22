@@ -102,8 +102,14 @@ export function clearStoredAuthTokens(): void {
   localStorage.removeItem('auth_refresh_token');
 }
 
-/** JWT tugashi / chiqish: tokenlarni olib, frontendni sinxronlashtirish */
+/** JWT tugadi — Firebase sessiyasi saqlanadi, sahifada qayta ulanish mumkin */
 export function clearApiSession(): void {
+  clearStoredAuthTokens();
+  window.dispatchEvent(new CustomEvent('auth:jwt-expired'));
+}
+
+/** To‘liq chiqish (Firebase + JWT) */
+export function clearApiSessionAndSignOut(): void {
   clearStoredAuthTokens();
   window.dispatchEvent(new CustomEvent('auth:session-expired'));
 }
@@ -112,6 +118,13 @@ interface ApiConfig extends RequestInit {
   params?: Record<string, string>;
   /** Ichki: 401 dan keyin refresh urinishi */
   _retry401?: boolean;
+}
+
+/** Saqlangan refresh token orqali access JWT yangilash (chiqmasdan). */
+export async function refreshStoredAccessToken(
+  baseUrl: string = API_BASE_URL
+): Promise<boolean> {
+  return refreshAccessToken(normalizeApiBaseUrl(baseUrl));
 }
 
 async function refreshAccessToken(baseUrl: string): Promise<boolean> {
