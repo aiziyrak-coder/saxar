@@ -63,9 +63,11 @@ export default function AdminClients() {
         })
       );
       setBalances(bal);
-    } catch {
+    } catch (e) {
       setClients([]);
       setBalances({});
+      addNotification('Xatolik', 'Mijozlar ro‘yxati yuklanmadi.');
+      console.error(e);
     } finally {
       setLoading(false);
     }
@@ -248,7 +250,7 @@ export default function AdminClients() {
                         <MapPin className="h-3 w-3 text-slate-400" /> {client.address || '\u2014'}
                       </div>
                     </td>
-                    <td className="py-4 px-6 text-sm font-medium text-slate-200">
+                    <td className="py-4 px-6 text-sm font-medium text-slate-700">
                       {client.region || '\u2014'}
                     </td>
                     <td className={`py-4 px-6 text-sm font-bold ${(balances[client.id] ?? 0) > 0 ? 'text-red-600' : 'text-emerald-600'}`}>

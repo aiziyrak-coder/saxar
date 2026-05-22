@@ -2,6 +2,8 @@ import type { DashboardStats, ChartData, Order } from '../types';
 import { fetchAllOrdersMerged } from '../utils/mergedData';
 import { djangoUsersApi } from './platformApi';
 import { hasDjangoJwt } from './djangoAuth';
+import { expenseApi } from './api';
+import { mapApiExpenseRowToExpense } from './b2bFromApi';
 
 export function emptyDashboardStats(): DashboardStats {
   return {
@@ -239,5 +241,17 @@ export async function getPLSummary(startDate: string, endDate: string): Promise<
       o.orderDate <= endDate
   );
   const revenue = orders.reduce((s, o) => s + o.totalAmount, 0);
-  return { revenue, expenses: 0, profit: revenue };
+  let expenses = 0;
+  if (hasDjangoJwt()) {
+    try {
+      const rows = await expenseApi.getAll();
+      expenses = rows
+        .map(mapApiExpenseRowToExpense)
+        .filter((e) => e.date >= startDate && e.date <= endDate)
+        .reduce((s, e) => s + e.amount, 0);
+    } catch {
+      /* ignore */
+    }
+  }
+  return { revenue, expenses, profit: revenue - expenses };
 }

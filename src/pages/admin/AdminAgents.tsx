@@ -33,8 +33,10 @@ export default function AdminAgents() {
     try {
       const rows = await djangoUsersApi.list('agent');
       setAgentUsers(rows.map(djangoRowToUser));
-    } catch {
+    } catch (e) {
       setAgentUsers([]);
+      addNotification('Xatolik', 'Agentlar ro‘yxati yuklanmadi.');
+      console.error(e);
     } finally {
       setAgentsLoading(false);
     }
@@ -104,6 +106,7 @@ export default function AdminAgents() {
         role: 'agent',
         password: `Saxar${phone.replace(/\D/g, '').slice(-6) || '123456'}`,
         first_name: form.name.trim(),
+        region: form.region.trim() || undefined,
         is_active: true,
       });
       setShowCreateModal(false);
@@ -205,7 +208,9 @@ export default function AdminAgents() {
                   size="sm"
                   className="flex-1"
                   type="button"
-                  onClick={() => window.location.href = `/admin/orders?agent=${encodeURIComponent(agent.id)}`}
+                  onClick={() => {
+                    window.location.href = `/admin/orders?agent=${encodeURIComponent(agent.id)}`;
+                  }}
                 >
                   Tarix
                 </Button>

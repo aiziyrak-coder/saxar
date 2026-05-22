@@ -5,16 +5,18 @@ import { Input } from '../../components/ui/Input';
 import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { Wallet, TrendingUp, TrendingDown, FileText, Download, Building2, Loader2 } from 'lucide-react';
-import { useFirestore } from '../../hooks/useFirestore';
 import { downloadCsv } from '../../platform/csv';
 import { extractVatFromInclusive } from '../../platform/vat';
 import { addNotification } from '../../platform/notifications';
 import { configureIntegrations, goPayroll } from '../../utils/featureActions';
 import { hasDjangoJwt } from '../../services/djangoAuth';
-import { paymentApi } from '../../services/api';
+import { paymentApi, expenseApi, ApiError } from '../../services/api';
+import { mapApiExpenseRowToExpense, mapApiPaymentRowToPayment } from '../../services/b2bFromApi';
+import { djangoUsersApi } from '../../services/platformApi';
+import { djangoUserToClient } from '../../utils/djangoUsers';
 import { resolveDjangoClientId } from '../../utils/djangoClientId';
+import DjangoApiReconnect from '../../components/DjangoApiReconnect';
 import { platformApi, type PlatformSettingsDto } from '../../services/platformApi';
-import { useAuth } from '../../context/AuthContext';
 import type { Payment, Expense, Client, ExpenseCategory } from '../../types';
 
 const EXPENSE_CATEGORIES: { value: ExpenseCategory; label: string }[] = [
@@ -30,7 +32,6 @@ const EXPENSE_CATEGORIES: { value: ExpenseCategory; label: string }[] = [
 ];
 
 export default function AdminFinance() {
-  const { userData } = useAuth();
   const [platform, setPlatform] = useState<PlatformSettingsDto | null>(null);
   const [activeTab, setActiveTab] = useState<'transactions' | 'aktsverka' | 'expenses'>('transactions');
   const [showModal, setShowModal] = useState<'payment' | 'expense' | null>(null);
@@ -41,9 +42,45 @@ export default function AdminFinance() {
     platformApi.getSettings().then(setPlatform).catch(() => setPlatform(null));
   }, []);
 
-  const { data: payments, create: createPaymentFs } = useFirestore<Payment>('payments');
-  const { data: expenses, create: createExpense } = useFirestore<Expense>('expenses');
-  const { data: clients } = useFirestore<Client>('clients');
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [dataLoading, setDataLoading] = useState(true);
+
+  const reloadFinance = async () => {
+    if (!hasDjangoJwt()) {
+      setPayments([]);
+      setExpenses([]);
+      setClients([]);
+      setDataLoading(false);
+      return;
+    }
+    setDataLoading(true);
+    try {
+      const [payRows, expRows, clientRows] = await Promise.all([
+        paymentApi.getAll(),
+        expenseApi.getAll(),
+        djangoUsersApi.list('b2b'),
+      ]);
+      setPayments(payRows.map(mapApiPaymentRowToPayment));
+      setExpenses(expRows.map(mapApiExpenseRowToExpense));
+      setClients(clientRows.map(djangoUserToClient));
+    } catch (e) {
+      setPayments([]);
+      setExpenses([]);
+      setClients([]);
+      addNotification(
+        'Xatolik',
+        e instanceof ApiError ? e.message : 'Moliya ma’lumotlari yuklanmadi.'
+      );
+    } finally {
+      setDataLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void reloadFinance();
+  }, []);
 
   const [paymentForm, setPaymentForm] = useState({
     direction: 'in' as 'in' | 'out',
@@ -135,41 +172,38 @@ export default function AdminFinance() {
 
   const handleSavePayment = async () => {
     if (paymentForm.amount <= 0) return;
+    if (!hasDjangoJwt()) {
+      addNotification('API', 'To‘lov uchun Django API bilan kiring.');
+      return;
+    }
     setSaving(true);
     try {
       const description =
         paymentForm.description.trim() ||
         `${paymentForm.direction === 'in' ? 'Kirim' : 'Chiqim'} - ${paymentForm.type}`;
 
-      if (hasDjangoJwt() && paymentForm.clientId) {
-        const djangoClientId = await resolveDjangoClientId(paymentForm.clientId);
-        if (djangoClientId) {
-          await paymentApi.create({
-            client: djangoClientId,
-            amount: paymentForm.amount,
-            type: paymentForm.type,
-            description,
-          });
-        }
+      const djangoClientId = paymentForm.clientId
+        ? await resolveDjangoClientId(paymentForm.clientId)
+        : null;
+      if (!djangoClientId) {
+        addNotification('Xatolik', 'Mijoz tanlang (Django ro‘yxatidan).');
+        return;
       }
-
-      await createPaymentFs({
-        type: paymentForm.type,
-        direction: paymentForm.direction,
+      await paymentApi.create({
+        client: djangoClientId,
         amount: paymentForm.amount,
-        currency: 'UZS',
-        clientId: paymentForm.clientId || undefined,
-        clientName: paymentForm.clientName.trim(),
+        type: paymentForm.type,
         description,
-        createdBy: userData?.uid || '',
-        createdByName: userData?.name || '',
-      } as Omit<Payment, 'id'>);
+      });
       setShowModal(null);
       setPaymentForm({ direction: 'in', type: 'cash', amount: 0, clientId: '', clientName: '', description: '' });
-      addNotification('To\u2019lov saqlandi', `${paymentForm.amount.toLocaleString()} UZS muvaffaqiyatli kiritildi.`);
+      addNotification('To\u2019lov saqlandi', `${paymentForm.amount.toLocaleString()} UZS serverda saqlandi.`);
+      await reloadFinance();
     } catch (e) {
-      console.error(e);
-      addNotification('Xatolik', 'To\u2019lov saqlashda xatolik yuz berdi.');
+      addNotification(
+        'Xatolik',
+        e instanceof ApiError ? e.message : 'To\u2019lov saqlashda xatolik yuz berdi.'
+      );
     } finally {
       setSaving(false);
     }
@@ -177,29 +211,48 @@ export default function AdminFinance() {
 
   const handleSaveExpense = async () => {
     if (expenseForm.amount <= 0 || !expenseForm.description.trim()) return;
+    if (!hasDjangoJwt()) {
+      addNotification('API', 'Xarajat uchun Django API bilan kiring.');
+      return;
+    }
     setSaving(true);
     try {
-      await createExpense({
+      await expenseApi.create({
         category: expenseForm.category,
         amount: expenseForm.amount,
         description: expenseForm.description.trim(),
         date: expenseForm.date,
-        createdBy: userData?.uid || '',
-        createdByName: userData?.name || '',
-      } as Omit<Expense, 'id'>);
+      });
       setShowModal(null);
       setExpenseForm({ category: 'other', amount: 0, description: '', date: new Date().toISOString().split('T')[0] });
-      addNotification('Xarajat saqlandi', `${expenseForm.amount.toLocaleString()} UZS muvaffaqiyatli kiritildi.`);
+      addNotification('Xarajat saqlandi', `${expenseForm.amount.toLocaleString()} UZS serverda saqlandi.`);
+      await reloadFinance();
     } catch (e) {
-      console.error(e);
-      addNotification('Xatolik', 'Xarajat saqlashda xatolik yuz berdi.');
+      addNotification(
+        'Xatolik',
+        e instanceof ApiError ? e.message : 'Xarajat saqlashda xatolik yuz berdi.'
+      );
     } finally {
       setSaving(false);
     }
   };
 
+  if (!hasDjangoJwt()) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold text-slate-900">Moliya va Buxgalteriya</h1>
+        <DjangoApiReconnect />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
+      {dataLoading && (
+        <p className="text-sm text-slate-500 flex items-center gap-2">
+          <Loader2 className="h-4 w-4 animate-spin" /> Yuklanmoqda...
+        </p>
+      )}
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-slate-900">Moliya va Buxgalteriya</h1>
         <div className="flex gap-2">

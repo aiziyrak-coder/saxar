@@ -28,7 +28,6 @@ import {
 } from '../../services/api';
 import { hasDjangoJwt } from '../../services/djangoAuth';
 import DjangoApiReconnect from '../../components/DjangoApiReconnect';
-import { syncProductToFirestore, removeProductFromFirestore } from '../../utils/productSync';
 import { logger } from '../../services/logger';
 import { ImageUpload } from '../../components/ui/ImageUpload';
 import { normalizeMediaPath, resolveMediaUrl } from '../../utils/mediaUrl';
@@ -203,7 +202,6 @@ export default function AdminProducts() {
         saved = await productApi.create(payload);
         addNotification('Yaratildi', `${saved.name} qo‘shildi`);
       }
-      await syncProductToFirestore(saved);
       setProductModal(false);
       await loadAll();
     } catch (e) {
@@ -217,8 +215,7 @@ export default function AdminProducts() {
     if (!window.confirm(`"${p.name}" ni nofaol qilasizmi?`)) return;
     setSaving(true);
     try {
-      const saved = await productApi.update(String(p.id), { is_active: false, is_b2b_active: false });
-      await syncProductToFirestore(saved);
+      await productApi.update(String(p.id), { is_active: false, is_b2b_active: false });
       addNotification('Nofaol', `${p.name} katalogdan yashirildi`);
       await loadAll();
     } catch (e) {
@@ -233,7 +230,6 @@ export default function AdminProducts() {
     setSaving(true);
     try {
       await productApi.delete(String(p.id));
-      await removeProductFromFirestore(String(p.id));
       addNotification('O‘chirildi', p.name);
       await loadAll();
     } catch (e) {
@@ -337,32 +333,11 @@ export default function AdminProducts() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Mahsulotlar katalogi</h1>
           <p className="text-slate-600 text-sm mt-1">
-            Qoʻshish, tahrirlash, narxlar, rasmlar. Ombor (WMS) uchun Firestore ga avtomatik sinxron.
+            Qoʻshish, tahrirlash, narxlar, rasmlar. Barcha o‘zgarishlar Django serverda saqlanadi.
           </p>
         </div>
         {tab === 'products' && (
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              type="button"
-              disabled={loading || saving}
-              onClick={async () => {
-                setSaving(true);
-                let n = 0;
-                for (const p of products) {
-                  try {
-                    await syncProductToFirestore(p);
-                    n += 1;
-                  } catch {
-                    /* skip */
-                  }
-                }
-                setSaving(false);
-                addNotification('Sinxron', `${n} ta mahsulot Firestore ga yozildi (ombor uchun).`);
-              }}
-            >
-              Omborga sinxron
-            </Button>
             <Button variant="primary" className="gap-2" type="button" onClick={openCreateProduct}>
               <Plus className="h-4 w-4" /> Yangi mahsulot
             </Button>

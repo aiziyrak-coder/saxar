@@ -386,6 +386,26 @@ export const expenseApi = {
   create: (data: Record<string, unknown>) => api.post<ApiExpenseRow>('/expenses/', data),
 };
 
+export interface ApiInventoryBatchRow {
+  id: number | string;
+  product: number | string;
+  product_name?: string;
+  batch_number?: string;
+  quantity?: number | string;
+  expiry_date?: string;
+  manufacture_date?: string;
+  location?: string;
+  status?: string;
+  created_at?: string;
+}
+
+export const inventoryBatchApi = {
+  getAll: () => api.get<ApiInventoryBatchRow[]>('/inventory-batches/'),
+  create: (data: Record<string, unknown>) => api.post<ApiInventoryBatchRow>('/inventory-batches/', data),
+  update: (id: string, data: Record<string, unknown>) =>
+    api.patch<ApiInventoryBatchRow>(`/inventory-batches/${id}/`, data),
+};
+
 export interface TelegramSettingsDto {
   admin_group_id: number;
   notify_new_orders: boolean;

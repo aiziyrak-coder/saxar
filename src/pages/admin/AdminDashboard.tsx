@@ -13,7 +13,10 @@ import {
   Clock
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { getDashboardStats, getSalesChartData, getTopAgents, getTopProducts, getSalesByRegion, getRecentOrders, getPendingApprovalsCount, emptySalesChartData } from '../../services/dashboard';
+import { getDashboardStats, getSalesChartData, getTopAgents, getTopProducts, getSalesByRegion, getRecentOrders, getPendingApprovalsCount, emptySalesChartData, emptyDashboardStats } from '../../services/dashboard';
+import { hasDjangoJwt } from '../../services/djangoAuth';
+import { addNotification } from '../../platform/notifications';
+import DjangoApiReconnect from '../../components/DjangoApiReconnect';
 import type { DashboardStats, Order, OrderStatus } from '../../types';
 
 type SalesChartRow = { name: string; total: number };
@@ -75,6 +78,8 @@ export default function AdminDashboard() {
       setPendingApprovals(pending);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
+      setStats(emptyDashboardStats());
+      addNotification('Dashboard', 'Ma’lumotlar yuklanmadi. API ulanishini tekshiring.');
       const fallback = emptySalesChartData(30);
       const series = fallback.datasets[0]?.data ?? [];
       setChartData(fallback.labels.map((label, i) => ({
@@ -112,7 +117,7 @@ export default function AdminDashboard() {
     { 
       label: 'Yangi buyurtmalar', 
       value: `${stats.dailyOrders} ta`, 
-      change: '+5.2%', 
+      change: stats.ordersChange ? `${stats.ordersChange > 0 ? '+' : ''}${stats.ordersChange.toFixed(1)}%` : '—', 
       trend: 'up', 
       icon: ShoppingBag 
     },
@@ -131,6 +136,15 @@ export default function AdminDashboard() {
       icon: Package 
     },
   ] : [];
+
+  if (!hasDjangoJwt() && !loading) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Dashboard</h1>
+        <DjangoApiReconnect />
+      </div>
+    );
+  }
 
   if (loading) {
     return (

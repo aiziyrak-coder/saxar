@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -11,16 +12,14 @@ import { printHtmlDocument } from '../../platform/printHtml';
 import { buildOrderReceiptHtml, type OrderReceiptLike } from '../../platform/orderReceipt';
 import { addNotification } from '../../platform/notifications';
 import { ORDER_NOTE_TEMPLATES } from '../../platform/orderNoteTemplates';
-import { useFirestore } from '../../hooks/useFirestore';
 import { useCatalogProducts } from '../../hooks/useCatalogProducts';
-import { generateOrderNumber, orderService } from '../../services/firestore';
-import { orderApi } from '../../services/api';
+import { orderApi, ApiError } from '../../services/api';
 import { hasDjangoJwt } from '../../services/djangoAuth';
 import { mapApiOrderRowToOrder } from '../../services/b2bFromApi';
+import { djangoUsersApi } from '../../services/platformApi';
+import { djangoUserToClient } from '../../utils/djangoUsers';
 import { resolveDjangoClientId } from '../../utils/djangoClientId';
-import { syncApiOrderToFirestore } from '../../utils/orderSync';
-import type { ApiOrderRow } from '../../services/api';
-import { useAuth } from '../../context/AuthContext';
+import DjangoApiReconnect from '../../components/DjangoApiReconnect';
 import type { Order, OrderStatus, Client } from '../../types';
 
 interface OrderRow extends OrderReceiptLike {}
@@ -60,10 +59,11 @@ interface OrderItemForm {
 }
 
 export default function AdminOrders() {
-  useAuth();
-  const { data: fsOrders, loading: fsLoading } = useFirestore<Order>('orders');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const agentFilter = searchParams.get('agent') || '';
   const [apiOrders, setApiOrders] = useState<Order[]>([]);
   const [apiLoading, setApiLoading] = useState(false);
+  const [clients, setClients] = useState<Client[]>([]);
 
   const reloadApiOrders = async () => {
     if (!hasDjangoJwt()) {
@@ -74,40 +74,45 @@ export default function AdminOrders() {
     try {
       const rows = await orderApi.getAll();
       setApiOrders(rows.map(mapApiOrderRowToOrder));
-    } catch {
+    } catch (e) {
       setApiOrders([]);
+      addNotification(
+        'Xatolik',
+        e instanceof ApiError ? e.message : 'Buyurtmalar yuklanmadi.'
+      );
     } finally {
       setApiLoading(false);
     }
   };
 
+  const reloadClients = async () => {
+    if (!hasDjangoJwt()) {
+      setClients([]);
+      return;
+    }
+    try {
+      const rows = await djangoUsersApi.list('b2b');
+      setClients(rows.map(djangoUserToClient));
+    } catch {
+      setClients([]);
+    }
+  };
+
   useEffect(() => {
     void reloadApiOrders();
+    void reloadClients();
   }, []);
 
-  const orders = useMemo(() => {
-    const seen = new Set<string>();
-    const merged: Order[] = [];
-    for (const o of apiOrders) {
-      const key = o.orderNumber || o.id;
-      merged.push(o);
-      seen.add(key);
-    }
-    for (const o of fsOrders) {
-      const key = o.orderNumber || o.id;
-      if (!seen.has(key)) {
-        merged.push(o);
-        seen.add(key);
-      }
-    }
-    return merged.sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
-  }, [apiOrders, fsOrders]);
+  const orders = useMemo(
+    () =>
+      [...apiOrders].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      ),
+    [apiOrders]
+  );
 
-  const ordersLoading = fsLoading || apiLoading;
+  const ordersLoading = apiLoading;
   const { data: products } = useCatalogProducts();
-  const { data: clients } = useFirestore<Client>('clients');
   const [search, setSearch] = useState('');
   const debounced = useDebouncedValue(search, 300);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
@@ -151,19 +156,20 @@ export default function AdminOrders() {
   const patchOrderStatus = async (order: Order, status: Order['status']) => {
     setSaving(true);
     try {
-      if (hasDjangoJwt() && /^\d+$/.test(String(order.id))) {
-        await orderApi.update(String(order.id), { status });
+      if (!hasDjangoJwt()) {
+        addNotification('API', 'Holat yangilash uchun Django API bilan kiring.');
+        return;
       }
-      await orderService.update(order.id, {
-        status,
-        updatedAt: new Date().toISOString(),
-      });
+      await orderApi.update(String(order.id), { status });
       await reloadApiOrders();
       addNotification('Holat yangilandi', `${order.orderNumber || order.id} → ${status}`);
       setDetail(null);
       setDetailOrder(null);
-    } catch {
-      addNotification('Xatolik', 'Holat yangilanmadi');
+    } catch (e) {
+      addNotification(
+        'Xatolik',
+        e instanceof ApiError ? e.message : 'Holat yangilanmadi'
+      );
     } finally {
       setSaving(false);
     }
@@ -177,7 +183,6 @@ export default function AdminOrders() {
     }
     setSaving(true);
     try {
-      const orderNumber = generateOrderNumber();
       const validItems = orderItems.filter(i => i.productName.trim());
       const djangoClientId = orderForm.clientId
         ? await resolveDjangoClientId(orderForm.clientId)
@@ -198,19 +203,17 @@ export default function AdminOrders() {
           total: item.quantity * item.unitPrice,
         })),
       } as Record<string, unknown>);
-      try {
-        await syncApiOrderToFirestore(created as ApiOrderRow);
-      } catch {
-        addNotification('Ogohlantirish', 'Buyurtma API da yaratildi, lekin ombor sinxroni xato — Mahsulotlar → Firestore sinxronini tekshiring.');
-      }
       await reloadApiOrders();
       setShowCreateModal(false);
       setOrderForm({ clientId: '', clientName: '', clientPhone: '', clientAddress: '', notes: '' });
       setOrderItems([{ productId: '', productName: '', quantity: 1, unitPrice: 0 }]);
-      addNotification('Buyurtma yaratildi', `${orderNumber} muvaffaqiyatli saqlandi.`);
+      const num = created?.id != null ? `ORD-${created.id}` : 'yangi';
+      addNotification('Buyurtma yaratildi', `${num} serverda saqlandi.`);
     } catch (e) {
-      console.error(e);
-      addNotification('Xatolik', 'Buyurtma yaratishda xatolik yuz berdi.');
+      addNotification(
+        'Xatolik',
+        e instanceof ApiError ? e.message : 'Buyurtma yaratishda xatolik yuz berdi.'
+      );
     } finally {
       setSaving(false);
     }
@@ -218,15 +221,21 @@ export default function AdminOrders() {
 
   const rows = useMemo(() => orders.map(mapOrderToRow), [orders]);
 
-  const filteredOrders = useMemo(
-    () =>
-      rows.filter(
-        (order) =>
-          order.id.toLowerCase().includes(debounced.toLowerCase()) ||
-          order.client.toLowerCase().includes(debounced.toLowerCase())
-      ),
-    [rows, debounced]
-  );
+  const filteredOrders = useMemo(() => {
+    let list = rows;
+    if (agentFilter) {
+      const norm = agentFilter.startsWith('django_') ? agentFilter : `django_${agentFilter}`;
+      list = list.filter((row) => {
+        const o = orders.find((x) => (x.orderNumber || x.id) === row.id);
+        return o?.agentId === norm || o?.agentId === agentFilter;
+      });
+    }
+    return list.filter(
+      (order) =>
+        order.id.toLowerCase().includes(debounced.toLowerCase()) ||
+        order.client.toLowerCase().includes(debounced.toLowerCase())
+    );
+  }, [rows, debounced, agentFilter, orders]);
 
   const allSelected =
     filteredOrders.length > 0 && filteredOrders.every((o) => selected[o.id]);
@@ -270,8 +279,29 @@ export default function AdminOrders() {
     printHtmlDocument(`Buyurtma ${o.id}`, buildOrderReceiptHtml(o));
   };
 
+  if (!hasDjangoJwt()) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Buyurtmalar</h1>
+        <DjangoApiReconnect />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
+      {agentFilter && (
+        <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          Agent filtri: <strong>{agentFilter}</strong>
+          <button
+            type="button"
+            className="ml-auto text-emerald-700 underline"
+            onClick={() => setSearchParams({})}
+          >
+            Filterni olib tashlash
+          </button>
+        </div>
+      )}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Buyurtmalar</h1>
         <div className="flex flex-wrap gap-2">

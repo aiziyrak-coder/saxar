@@ -1,14 +1,18 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { Search, Plus, AlertTriangle, Barcode, ArrowRightLeft, Package, Calendar } from 'lucide-react';
-import { useFirestore } from '../../hooks/useFirestore';
-import { inventoryService, generateBatchNumber } from '../../services/firestore';
+import { useCatalogProducts } from '../../hooks/useCatalogProducts';
+import { inventoryBatchApi } from '../../services/api';
+import { hasDjangoJwt } from '../../services/djangoAuth';
+import { ApiError } from '../../services/api';
 import { addNotification } from '../../platform/notifications';
 import { promptBarcodeScan } from '../../utils/featureActions';
+import { generateBatchNumber, mapApiBatchToInventoryItem } from '../../utils/inventoryFromApi';
+import DjangoApiReconnect from '../../components/DjangoApiReconnect';
 import type { InventoryItem, Product } from '../../types';
 
 type WmsTabId = 'inventory' | 'transactions' | 'expiry';
@@ -27,9 +31,36 @@ export default function AdminWMS() {
   const [activeTab, setActiveTab] = useState<'inventory' | 'transactions' | 'expiry'>('inventory');
   const [showStockInModal, setShowStockInModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
-  
-  const { data: inventory, loading: inventoryLoading, refresh: refreshInventory } = useFirestore<InventoryItem>('inventory');
-  const { data: products, loading: productsLoading } = useFirestore<Product>('products');
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [inventoryLoading, setInventoryLoading] = useState(true);
+  const { data: products, loading: productsLoading } = useCatalogProducts();
+
+  const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
+
+  const refreshInventory = useCallback(async () => {
+    if (!hasDjangoJwt()) {
+      setInventory([]);
+      setInventoryLoading(false);
+      return;
+    }
+    setInventoryLoading(true);
+    try {
+      const rows = await inventoryBatchApi.getAll();
+      setInventory(rows.map((r) => mapApiBatchToInventoryItem(r, productById)));
+    } catch (e) {
+      setInventory([]);
+      addNotification(
+        'Xatolik',
+        e instanceof ApiError ? e.message : 'Ombor partiyalari yuklanmadi.'
+      );
+    } finally {
+      setInventoryLoading(false);
+    }
+  }, [productById]);
+
+  useEffect(() => {
+    void refreshInventory();
+  }, [refreshInventory]);
 
   // Calculate total stock per product
   const productStock = inventory.reduce((acc, item) => {
@@ -79,33 +110,48 @@ export default function AdminWMS() {
   };
 
   const handleStockIn = async (data: StockInFormPayload) => {
-    const product = products.find(p => p.id === data.productId);
+    if (!hasDjangoJwt()) {
+      addNotification('API', 'Kirim uchun Django API bilan kiring.');
+      return;
+    }
+    const product = products.find((p) => p.id === data.productId);
     if (!product) return;
 
     const batchNumber = data.batchNumber || generateBatchNumber(data.productId);
-    
-    await inventoryService.create({
-      productId: data.productId,
-      productName: product.name,
-      sku: product.sku,
-      batchNumber,
-      quantity: data.quantity,
-      unit: product.unit,
-      expiryDate: data.expiryDate,
-      manufactureDate: data.manufactureDate,
-      location: data.location,
-      status: 'available',
-      createdAt: new Date().toISOString(),
-    } as Omit<InventoryItem, 'id'>);
-
-    setShowStockInModal(false);
-    refreshInventory();
+    try {
+      await inventoryBatchApi.create({
+        product: Number(product.id),
+        batch_number: batchNumber,
+        quantity: data.quantity,
+        expiry_date: data.expiryDate,
+        manufacture_date: data.manufactureDate,
+        location: data.location,
+        status: 'available',
+      });
+      setShowStockInModal(false);
+      addNotification('Kirim', `${product.name} — ${data.quantity} ${product.unit} qo‘shildi.`);
+      await refreshInventory();
+    } catch (e) {
+      addNotification(
+        'Xatolik',
+        e instanceof ApiError ? e.message : 'Kirim saqlanmadi.'
+      );
+    }
   };
 
   const filteredProducts = products.filter(product =>
     product.name.toLowerCase().includes(search.toLowerCase()) ||
     product.sku.toLowerCase().includes(search.toLowerCase())
   );
+
+  if (!hasDjangoJwt()) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold text-slate-900">Ombor boshqaruvi (WMS)</h1>
+        <DjangoApiReconnect />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -518,7 +564,7 @@ function TransferModal({ isOpen, onClose, inventory, onDone }: TransferModalProp
     if (!selectedBatch || !formData.toLocation.trim()) return;
     setSaving(true);
     try {
-      await inventoryService.update(selectedBatch.id, { location: formData.toLocation.trim() });
+      await inventoryBatchApi.update(selectedBatch.id, { location: formData.toLocation.trim() });
       addNotification('O\u2019tkazma', `${selectedBatch.productName} ${selectedBatch.location} \u2192 ${formData.toLocation} ga o\u2019tkazildi.`);
       setFormData({ batchId: '', toLocation: '', quantity: '' });
       onDone();

@@ -4,10 +4,10 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
 import { Search, Plus, Play, CheckCircle2, Clock, AlertTriangle, Loader2 } from 'lucide-react';
-import { useFirestore } from '../../hooks/useFirestore';
+import { useCatalogProducts } from '../../hooks/useCatalogProducts';
 import { addNotification } from '../../platform/notifications';
-import { useAuth } from '../../context/AuthContext';
-import type { Product } from '../../types';
+import { hasDjangoJwt } from '../../services/djangoAuth';
+import DjangoApiReconnect from '../../components/DjangoApiReconnect';
 
 interface ProductionOrder {
   id: string;
@@ -26,10 +26,9 @@ interface ProductionOrder {
 }
 
 export default function AdminProduction() {
-  const { userData } = useAuth();
   const [search, setSearch] = useState('');
-  const { data: products } = useFirestore<Product>('products');
-  const { data: productionOrders, create: createProductionOrder } = useFirestore<ProductionOrder>('production_orders');
+  const { data: products } = useCatalogProducts();
+  const productionOrders: ProductionOrder[] = [];
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
@@ -55,24 +54,12 @@ export default function AdminProduction() {
     if (!form.productName.trim() || form.quantity <= 0) return;
     setSaving(true);
     try {
-      await createProductionOrder({
-        product: form.productName,
-        productId: form.productId,
-        quantity: form.quantity,
-        unit: form.unit,
-        status: 'Kutilmoqda',
-        progress: 0,
-        startDate: form.startDate,
-        endDate: form.endDate,
-        createdBy: userData?.uid || '',
-        createdByName: userData?.name || '',
-      } as Omit<ProductionOrder, 'id'>);
+      addNotification(
+        'Tez orada',
+        'Ishlab chiqarish buyurtmalari Django API ga ulanadi. Hozircha Ombor (WMS) orqali kirim qiling.'
+      );
       setShowCreateModal(false);
       setForm({ productId: '', productName: '', quantity: 0, unit: 'kg', startDate: new Date().toISOString().split('T')[0], endDate: '' });
-      addNotification('Ishlab chiqarish', 'Yangi buyurtma muvaffaqiyatli yaratildi.');
-    } catch (e) {
-      console.error(e);
-      addNotification('Xatolik', 'Buyurtma yaratishda xatolik yuz berdi.');
     } finally {
       setSaving(false);
     }
@@ -82,8 +69,21 @@ export default function AdminProduction() {
     o.product?.toLowerCase().includes(search.toLowerCase()) || o.id?.includes(search)
   );
 
+  if (!hasDjangoJwt()) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold text-slate-900">Ishlab chiqarish</h1>
+        <DjangoApiReconnect />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        Ishlab chiqarish moduli Django API ga ulanmoqda. Partiyalar va kirimlar hozir{' '}
+        <strong>Ombor (WMS)</strong> bo‘limida boshqariladi.
+      </div>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-2xl font-bold text-slate-900">Ishlab chiqarish</h1>
         <Button

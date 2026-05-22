@@ -5,8 +5,10 @@ import type {
   OrderStatus,
   Payment,
   PaymentType,
+  Expense,
+  ExpenseCategory,
 } from '../types';
-import type { ApiOrderItemRow, ApiOrderRow, ApiPaymentRow } from './api';
+import type { ApiOrderItemRow, ApiOrderRow, ApiPaymentRow, ApiExpenseRow } from './api';
 
 const ORDER_STATUSES: OrderStatus[] = [
   'pending',
@@ -57,8 +59,8 @@ export function mapApiOrderRowToOrder(row: ApiOrderRow): Order {
   const src = String(row.source || 'b2b').toLowerCase();
   const source: OrderSource = src === 'agent' ? 'agent' : src === 'admin' ? 'admin' : 'b2b';
 
-  const agentId = row.agent != null ? String(row.agent) : undefined;
-  const driverId = row.driver != null ? String(row.driver) : undefined;
+  const agentId = row.agent != null ? `django_${row.agent}` : undefined;
+  const driverId = row.driver != null ? `django_${row.driver}` : undefined;
 
   return {
     id,
@@ -71,6 +73,8 @@ export function mapApiOrderRowToOrder(row: ApiOrderRow): Order {
     clientName: String(row.client_name ?? ''),
     clientPhone: '',
     clientAddress: '',
+    agentName: row.agent_name ? String(row.agent_name) : undefined,
+    driverName: row.driver_name ? String(row.driver_name) : undefined,
     items,
     subtotal: totalAmount,
     discountAmount: 0,
@@ -89,7 +93,7 @@ export function mapApiOrderRowToOrder(row: ApiOrderRow): Order {
 /** Map Django `PaymentSerializer` row to frontend `Payment`. */
 export function mapApiPaymentRowToPayment(row: ApiPaymentRow): Payment {
   const id = String(row.id);
-  const clientId = row.client != null ? String(row.client) : '';
+  const clientId = row.client != null ? `django_${row.client}` : '';
   return {
     id,
     type: normalizePaymentType(row.type),
@@ -100,6 +104,31 @@ export function mapApiPaymentRowToPayment(row: ApiPaymentRow): Payment {
     clientId: clientId || undefined,
     description: String(row.description ?? ''),
     referenceNumber: id,
+    createdBy: '',
+    createdByName: '',
+    createdAt: String(row.created_at ?? new Date().toISOString()),
+  };
+}
+
+const EXPENSE_CATEGORIES: ExpenseCategory[] = [
+  'salary', 'rent', 'utilities', 'fuel', 'maintenance', 'tax', 'marketing', 'office', 'other',
+];
+
+function normalizeExpenseCategory(c: string | undefined): ExpenseCategory {
+  const v = String(c || '').toLowerCase();
+  return (EXPENSE_CATEGORIES.includes(v as ExpenseCategory) ? v : 'other') as ExpenseCategory;
+}
+
+/** Map Django `ExpenseSerializer` row to frontend `Expense`. */
+export function mapApiExpenseRowToExpense(row: ApiExpenseRow): Expense {
+  const id = String(row.id);
+  const dateRaw = row.date ?? row.created_at;
+  return {
+    id,
+    category: normalizeExpenseCategory(row.category),
+    amount: Number(row.amount ?? 0),
+    description: String(row.description ?? ''),
+    date: dateRaw ? String(dateRaw).slice(0, 10) : new Date().toISOString().slice(0, 10),
     createdBy: '',
     createdByName: '',
     createdAt: String(row.created_at ?? new Date().toISOString()),
