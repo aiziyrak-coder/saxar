@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from accounts.permissions import IsStaffRole
+from .media_utils import normalize_media_path
 from .models import Category, Brand, Product, InventoryBatch, InventoryTransaction
 
 
@@ -20,11 +21,21 @@ class CategorySerializer(serializers.ModelSerializer):
             "description": {"allow_blank": True, "required": False},
         }
 
+    def validate_image(self, value: str) -> str:
+        return normalize_media_path(value)
+
 
 class BrandSerializer(serializers.ModelSerializer):
     class Meta:
         model = Brand
         fields = "__all__"
+        extra_kwargs = {
+            "logo": {"allow_blank": True, "required": False},
+            "description": {"allow_blank": True, "required": False},
+        }
+
+    def validate_logo(self, value: str) -> str:
+        return normalize_media_path(value)
 
 
 class ProductSerializer(serializers.ModelSerializer):
@@ -34,6 +45,14 @@ class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
         fields = "__all__"
+        extra_kwargs = {
+            "image": {"allow_blank": True, "required": False},
+            "description": {"allow_blank": True, "required": False},
+            "barcode": {"allow_blank": True, "required": False},
+        }
+
+    def validate_image(self, value: str) -> str:
+        return normalize_media_path(value)
 
 
 class InventoryBatchSerializer(serializers.ModelSerializer):

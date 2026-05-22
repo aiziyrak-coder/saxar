@@ -31,7 +31,7 @@ import DjangoApiReconnect from '../../components/DjangoApiReconnect';
 import { syncProductToFirestore, removeProductFromFirestore } from '../../utils/productSync';
 import { logger } from '../../services/logger';
 import { ImageUpload } from '../../components/ui/ImageUpload';
-import { resolveMediaUrl } from '../../utils/mediaUrl';
+import { normalizeMediaPath, resolveMediaUrl } from '../../utils/mediaUrl';
 
 type Tab = 'products' | 'categories' | 'brands';
 
@@ -176,7 +176,7 @@ export default function AdminProducts() {
       sku: productForm.sku.trim(),
       barcode: productForm.barcode.trim(),
       description: productForm.description.trim(),
-      image: productForm.image.trim(),
+      image: normalizeMediaPath(productForm.image.trim()),
       category: Number(productForm.category) || productForm.category,
       brand: productForm.brand ? Number(productForm.brand) || productForm.brand : null,
       unit: productForm.unit,
@@ -254,7 +254,7 @@ export default function AdminProducts() {
       const payload = {
         name: categoryForm.name.trim(),
         description: categoryForm.description.trim(),
-        image: categoryForm.image.trim(),
+        image: normalizeMediaPath(categoryForm.image.trim()),
         sort_order: Number(categoryForm.sort_order) || 0,
         is_active: categoryForm.is_active,
       };
@@ -285,7 +285,7 @@ export default function AdminProducts() {
     try {
       const payload = {
         name: brandForm.name.trim(),
-        logo: brandForm.logo.trim(),
+        logo: normalizeMediaPath(brandForm.logo.trim()),
         description: brandForm.description.trim(),
         is_active: brandForm.is_active,
       };
@@ -631,6 +631,7 @@ export default function AdminProducts() {
             <ImageUpload
               label="Mahsulot rasmi"
               folder="catalog"
+              hint="Fayl yuklang yoki internetdagi rasm havolasini (URL) kiriting"
               value={productForm.image}
               onChange={(image) => setProductForm({ ...productForm, image })}
             />

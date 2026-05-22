@@ -4,6 +4,7 @@ Tests for inventory module
 from django.test import TestCase
 from decimal import Decimal
 from .models import Category, Brand, Product, InventoryBatch
+from .serializers import ProductSerializer
 
 
 class CategoryModelTests(TestCase):
@@ -121,3 +122,36 @@ class InventoryBatchModelTests(TestCase):
         self.assertEqual(self.batch.product, self.product)
         self.assertEqual(self.batch.batch_number, 'BCH-001')
         self.assertEqual(self.batch.quantity, Decimal('100.00'))
+
+
+class ProductSerializerImageTests(TestCase):
+    def setUp(self):
+        self.category = Category.objects.create(name='Cat')
+
+    def test_accepts_media_path(self):
+        data = {
+            'name': 'Kolbasa',
+            'sku': 'SKU-MEDIA-1',
+            'category': self.category.pk,
+            'image': '/media/uploads/catalog/x.jpg',
+            'base_price': '100',
+            'b2b_price': '90',
+            'cost_price': '50',
+        }
+        s = ProductSerializer(data=data)
+        self.assertTrue(s.is_valid(), s.errors)
+        self.assertEqual(s.validated_data['image'], '/media/uploads/catalog/x.jpg')
+
+    def test_accepts_https_url(self):
+        data = {
+            'name': 'Servelat',
+            'sku': 'SKU-URL-1',
+            'category': self.category.pk,
+            'image': 'https://cdn.example.com/p.jpg',
+            'base_price': '100',
+            'b2b_price': '90',
+            'cost_price': '50',
+        }
+        s = ProductSerializer(data=data)
+        self.assertTrue(s.is_valid(), s.errors)
+        self.assertEqual(s.validated_data['image'], 'https://cdn.example.com/p.jpg')
