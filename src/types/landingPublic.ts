@@ -41,8 +41,14 @@ export interface LandingStatCard {
   subtitle: string;
 }
 
+export interface LandingSeoCopy {
+  pageTitle: string;
+  metaDescription: string;
+}
+
 export interface LandingPublicCopy {
   version: 1;
+  seo?: LandingSeoCopy;
   hero: LandingHeroCopy;
   /** Aynan 4 ta slayd */
   banners: LandingBannerSlide[];
@@ -66,6 +72,10 @@ function defaultHeroLead(): string {
 export function getDefaultLandingPublicCopy(): LandingPublicCopy {
   return {
     version: 1,
+    seo: {
+      pageTitle: `${BRAND.name} — go'sht-kolbasa mahsulotlari | ${BRAND.erpProductName}`,
+      metaDescription: BRAND.description,
+    },
     hero: {
       eyebrow: `${BRAND.name} kompaniyasi`,
       headline: 'Tabiiylik, sifat va ',
@@ -151,6 +161,7 @@ export function mergeLandingPublicCopy(remote: Partial<LandingPublicCopy> | null
   if (!remote || typeof remote !== 'object') return d;
   return {
     version: 1,
+    seo: { ...d.seo!, ...remote.seo },
     hero: { ...d.hero, ...remote.hero },
     banners: mergeFour(remote.banners as LandingBannerSlide[] | undefined, d.banners),
     featureCards: mergeFour(remote.featureCards as LandingFeatureCard[] | undefined, d.featureCards),

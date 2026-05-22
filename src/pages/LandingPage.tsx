@@ -185,6 +185,16 @@ export default function LandingPage() {
   }, []);
 
   useEffect(() => {
+    if (landing.seo?.pageTitle) {
+      document.title = landing.seo.pageTitle;
+    }
+    const meta = document.querySelector('meta[name="description"]');
+    if (meta && landing.seo?.metaDescription) {
+      meta.setAttribute('content', landing.seo.metaDescription);
+    }
+  }, [landing.seo?.pageTitle, landing.seo?.metaDescription]);
+
+  useEffect(() => {
     const onUpdated = () => {
       fetchLandingPublicCopy().then(setLanding);
     };

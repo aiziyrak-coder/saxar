@@ -1,6 +1,7 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .platform_views import PlatformSettingsView, PlatformSettingsPublicView, SmsTestView
+from .landing_views import LandingPublicView, LandingAdminView
 from .views import (
     RegisterB2BView,
     MeView,
@@ -21,5 +22,7 @@ urlpatterns = [
     path("platform/settings/", PlatformSettingsView.as_view(), name="platform_settings"),
     path("platform/settings/public/", PlatformSettingsPublicView.as_view(), name="platform_settings_public"),
     path("platform/sms/test/", SmsTestView.as_view(), name="platform_sms_test"),
+    path("platform/landing/public/", LandingPublicView.as_view(), name="landing_public"),
+    path("platform/landing/", LandingAdminView.as_view(), name="landing_admin"),
 ]
 

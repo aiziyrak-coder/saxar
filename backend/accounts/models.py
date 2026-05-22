@@ -71,6 +71,12 @@ class PlatformSettings(models.Model):
     credit_limit_new_client = models.PositiveIntegerField(default=5_000_000)
     credit_limit_trusted_client = models.PositiveIntegerField(default=50_000_000)
 
+    landing_public_json = models.TextField(
+        blank=True,
+        default="",
+        help_text="Bosh sahifa (landing) matn va slaydlar — JSON (LandingPublicCopy).",
+    )
+
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
