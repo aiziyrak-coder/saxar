@@ -5,7 +5,7 @@ import { Input } from '../../components/ui/Input';
 import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { Plus } from 'lucide-react';
-import { orderBy, limit } from 'firebase/firestore';
+/* Firestore olib tashlangan */
 import { useAuth } from '../../context/AuthContext';
 import { expenseService } from '../../services/firestore';
 import { logAudit, AuditActions, EntityTypes } from '../../services/audit';
@@ -34,14 +34,8 @@ export default function AccountantExpenses() {
 
   const loadExpenses = async () => {
     setLoading(true);
-    try {
-      const rows = await expenseService.query([orderBy('date', 'desc'), limit(50)]);
-      setExpenses(rows);
-    } catch {
-      setExpenses([]);
-    } finally {
-      setLoading(false);
-    }
+    setExpenses([]);
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -65,7 +59,7 @@ export default function AccountantExpenses() {
         createdAt: new Date().toISOString(),
       } as Omit<Expense, 'id'>);
       if (!id) {
-        addNotification('Xarajat', 'Firebase sozlanmagan — yozuv saqlanmadi.');
+        addNotification('Xarajat', 'Xarajatlar API hali ulanmagan — yozuv saqlanmadi.');
         return;
       }
       await logAudit(AuditActions.EXPENSE_CREATE, EntityTypes.EXPENSE, id, userData.uid, userData.name || '', userData.role, undefined, { category: form.category, amount });

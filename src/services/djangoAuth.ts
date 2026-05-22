@@ -1,4 +1,12 @@
-import { api, ApiError, clearStoredAuthTokens, refreshStoredAccessToken } from './api';
+import {
+  api,
+  ApiError,
+  API_BASE_URL,
+  buildApiFetchUrl,
+  clearStoredAuthTokens,
+  coerceBrowserFetchUrl,
+  refreshStoredAccessToken,
+} from './api';
 import type { UserRole } from '../types';
 
 /** Django REST API talab qiladigan rollar */
@@ -17,6 +25,12 @@ export interface DjangoMeDto {
   is_active: boolean;
   email?: string;
   phone?: string;
+  first_name?: string;
+  last_name?: string;
+  company_name?: string;
+  stir?: string;
+  address?: string;
+  region?: string;
 }
 
 function phoneToUsername(phone: string): string {
@@ -31,6 +45,26 @@ export interface JwtPair {
 }
 
 /** Firebase kirishdan keyin Django JWT (Telegram, platform sozlamalari uchun). */
+/** Login sahifasida API tekshiruvi — tokenlarni saqlamaydi. */
+export async function probeDjangoApiReachable(
+  phone: string = '+998 90 000 01 01',
+  password: string = 'DevRole_Admin!'
+): Promise<boolean> {
+  const username = phoneToUsername(phone);
+  let url = buildApiFetchUrl(API_BASE_URL, '/accounts/auth/login/');
+  url = coerceBrowserFetchUrl(url);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function obtainDjangoJwtDetailed(
   phone: string,
   password: string

@@ -50,6 +50,10 @@ export interface DjangoUserRow {
   email: string;
   role: UserRole;
   phone: string;
+  stir?: string;
+  company_name?: string;
+  region?: string;
+  address?: string;
   telegram_username?: string;
   telegram_chat_id?: number | null;
   is_active?: boolean;

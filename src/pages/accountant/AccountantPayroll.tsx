@@ -4,9 +4,11 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
 import { Users, Plus, Loader2 } from 'lucide-react';
-import { where } from 'firebase/firestore';
-import { payrollService, userService } from '../../services/firestore';
-import type { PayrollItem as PayrollItemType, User } from '../../types';
+import { payrollService } from '../../services/firestore';
+import { djangoUsersApi } from '../../services/platformApi';
+import { hasDjangoJwt } from '../../services/djangoAuth';
+import { djangoRowToUser } from '../../utils/djangoUsers';
+import type { PayrollItem as PayrollItemType, User, UserRole } from '../../types';
 
 const now = new Date();
 const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -31,14 +33,16 @@ export default function AccountantPayroll() {
     (async () => {
       setLoading(true);
       try {
-        const [payrollList, usersList] = await Promise.all([
-          payrollService.query([where('period', '==', period)]),
-          userService.getAll('createdAt', 'asc'),
-        ]);
-        payrollList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        const payrollList: PayrollItemType[] = [];
+        let usersList: User[] = [];
+        if (hasDjangoJwt()) {
+          const staffRoles: UserRole[] = ['accountant', 'warehouse', 'production', 'agent', 'driver', 'admin'];
+          const rows = await Promise.all(staffRoles.map((r) => djangoUsersApi.list(r)));
+          usersList = rows.flat().map(djangoRowToUser);
+        }
         if (!cancelled) {
           setItems(payrollList);
-          setUsers(usersList.filter(u => u.role && u.role !== 'b2b'));
+          setUsers(usersList);
         }
       } catch (e) {
         console.error(e);
@@ -69,9 +73,24 @@ export default function AccountantPayroll() {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       } as Omit<PayrollItemType, 'id'>);
-      const list = await payrollService.query([where('period', '==', period)]);
-      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      setItems(list);
+      setItems((prev) => [
+        ...prev,
+        {
+          id: `local_${Date.now()}`,
+          userId: user.id!,
+          userName: user.phone || user.name || '—',
+          role: user.role!,
+          period,
+          baseSalary: form.baseSalary,
+          bonusAmount: form.bonusAmount,
+          commissionAmount: form.commissionAmount,
+          deductionAmount: form.deductionAmount,
+          totalAmount: total,
+          status: 'draft',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      ]);
       setShowModal(false);
       setForm({ userId: '', baseSalary: 0, bonusAmount: 0, commissionAmount: 0, deductionAmount: 0 });
     } catch (e) {

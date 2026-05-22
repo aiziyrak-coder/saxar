@@ -1,5 +1,4 @@
 import type { UserRole } from '../types';
-import { isFirebaseConfigured } from '../firebase';
 import { ROLE_HOME_PATHS } from './roles';
 
 /** Rasmiy sayt va kompaniya nomi */
@@ -85,8 +84,7 @@ export function isDemoRoleQuickLoginUiAllowed(): boolean {
   return isDemoLoginUiAllowed();
 }
 
-/** Firebase sozlanmagan bo‘lsa — barcha rollar uchun tezkir kirish paneli ko‘rinadi */
+/** Rol tezkir kirish paneli (Django API; Firebase yo‘q) */
 export function shouldShowRoleLoginPanel(): boolean {
-  if (!isFirebaseConfigured()) return true;
   return isDemoRoleQuickLoginUiAllowed();
 }

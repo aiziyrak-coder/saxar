@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import type { QueryConstraint, DocumentData } from 'firebase/firestore';
-import { tryGetFirebaseDb } from '../firebase';
-import { FirestoreService } from '../services/firestore';
+
+/** Firestore olib tashlangan — bo‘sh ro‘yxat qaytaradi. */
+export type FirestoreQueryConstraint = { __firestoreConstraint?: true };
 
 interface UseFirestoreState<T> {
   data: T[];
@@ -16,158 +16,60 @@ interface UseFirestoreReturn<T> extends UseFirestoreState<T> {
   remove: (id: string) => Promise<boolean>;
 }
 
-export function useFirestore<T extends DocumentData>(
-  collectionName: string,
-  constraints?: QueryConstraint[]
+export function useFirestore<T extends { id?: string }>(
+  _collectionName: string,
+  _constraints?: FirestoreQueryConstraint[]
 ): UseFirestoreReturn<T> {
-  const [state, setState] = useState<UseFirestoreState<T>>({
-    data: [],
-    loading: true,
-    error: null,
-  });
-
-  const service = useMemo(() => new FirestoreService<T>(collectionName), [collectionName]);
+  const empty = useMemo(() => [] as T[], []);
 
   const fetchData = useCallback(async () => {
-    const db = tryGetFirebaseDb();
-    if (!db) {
-      setState({ data: [], loading: false, error: null });
-      return;
-    }
-    try {
-      setState(prev => ({ ...prev, loading: true, error: null }));
-      
-      let items: T[];
-      if (constraints && constraints.length > 0) {
-        items = await service.query(constraints);
-      } else {
-        items = await service.getAll();
-      }
-      
-      setState({ data: items, loading: false, error: null });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch data';
-      setState({
-        data: [],
-        loading: false,
-        error: errorMessage,
-      });
-    }
-  }, [service, constraints]);
+    /* Django API sahifalarida alohida yuklanadi */
+  }, []);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  const create = useCallback(async (data: Omit<T, 'id'>): Promise<string | null> => {
-    if (!tryGetFirebaseDb()) return null;
-    try {
-      const id = await service.create(data);
-      await fetchData();
-      return id;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to create';
-      setState(prev => ({ ...prev, error: errorMessage }));
-      return null;
-    }
-  }, [service, fetchData]);
-
-  const update = useCallback(async (id: string, data: Partial<T>): Promise<boolean> => {
-    if (!tryGetFirebaseDb()) return false;
-    try {
-      await service.update(id, data);
-      await fetchData();
-      return true;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to update';
-      setState(prev => ({ ...prev, error: errorMessage }));
-      return false;
-    }
-  }, [service, fetchData]);
-
-  const remove = useCallback(async (id: string): Promise<boolean> => {
-    if (!tryGetFirebaseDb()) return false;
-    try {
-      await service.delete(id);
-      await fetchData();
-      return true;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to delete';
-      setState(prev => ({ ...prev, error: errorMessage }));
-      return false;
-    }
-  }, [service, fetchData]);
+  const [state] = useState<UseFirestoreState<T>>({
+    data: empty,
+    loading: false,
+    error: null,
+  });
 
   return {
     ...state,
     refresh: fetchData,
-    create,
-    update,
-    remove,
+    create: async () => null,
+    update: async () => false,
+    remove: async () => false,
   };
 }
 
-// Hook for single document
-export function useFirestoreDoc<T extends DocumentData>(
-  collectionName: string,
+export function useFirestoreDoc<T extends { id?: string }>(
+  _collectionName: string,
   docId: string | null
 ) {
-  const [state, setState] = useState<{
+  const [state] = useState<{
     data: T | null;
     loading: boolean;
     error: string | null;
   }>({
     data: null,
-    loading: !!docId,
+    loading: false,
     error: null,
   });
 
-  const service = useMemo(() => new FirestoreService<T>(collectionName), [collectionName]);
-
   const fetchDoc = useCallback(async () => {
-    if (!docId) {
-      setState({ data: null, loading: false, error: null });
-      return;
-    }
-    if (!tryGetFirebaseDb()) {
-      setState({ data: null, loading: false, error: null });
-      return;
-    }
-
-    try {
-      setState(prev => ({ ...prev, loading: true, error: null }));
-      const doc = await service.getById(docId);
-      setState({ data: doc, loading: false, error: null });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch document';
-      setState({
-        data: null,
-        loading: false,
-        error: errorMessage,
-      });
-    }
-  }, [service, docId]);
+    if (!docId) return;
+  }, [docId]);
 
   useEffect(() => {
-    fetchDoc();
+    void fetchDoc();
   }, [fetchDoc]);
-
-  const update = useCallback(async (data: Partial<T>): Promise<boolean> => {
-    if (!docId || !tryGetFirebaseDb()) return false;
-    try {
-      await service.update(docId, data);
-      await fetchDoc();
-      return true;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to update';
-      setState(prev => ({ ...prev, error: errorMessage }));
-      return false;
-    }
-  }, [docId, service, fetchDoc]);
 
   return {
     ...state,
     refresh: fetchDoc,
-    update,
+    update: async () => false,
   };
 }

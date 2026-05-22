@@ -1,13 +1,7 @@
-import { tryGetFirebaseDb } from '../firebase';
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  limit,
-  getDocs,
-} from 'firebase/firestore';
 import type { DashboardStats, ChartData, Order } from '../types';
+import { fetchAllOrdersMerged } from '../utils/mergedData';
+import { djangoUsersApi } from './platformApi';
+import { hasDjangoJwt } from './djangoAuth';
 
 export function emptyDashboardStats(): DashboardStats {
   return {
@@ -45,314 +39,157 @@ export function emptySalesChartData(days: number): ChartData {
   };
 }
 
-// Get dashboard statistics
-export async function getDashboardStats(): Promise<DashboardStats> {
-  const db = tryGetFirebaseDb();
-  if (!db) return emptyDashboardStats();
+const DELIVERED_STATUSES = ['confirmed', 'picking', 'packed', 'in_transit', 'delivered'];
 
+function isCountableOrder(o: Order): boolean {
+  return DELIVERED_STATUSES.includes(o.status);
+}
+
+async function loadOrders(): Promise<Order[]> {
+  if (!hasDjangoJwt()) return [];
+  return fetchAllOrdersMerged();
+}
+
+export async function getDashboardStats(): Promise<DashboardStats> {
   try {
+    const orders = (await loadOrders()).filter(isCountableOrder);
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
+    const weekAgo = new Date(today);
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
 
-    // Get start of month
-    const startOfMonthDate = new Date(today.getFullYear(), today.getMonth(), 1);
-    const startOfMonthStr = startOfMonthDate.toISOString().split('T')[0];
+    const dailyOrders = orders.filter((o) => o.orderDate === todayStr);
+    const weeklyOrders = orders.filter((o) => o.orderDate && new Date(o.orderDate) >= weekAgo);
+    const monthlyOrders = orders.filter((o) => o.orderDate && new Date(o.orderDate) >= monthStart);
 
-    // Get yesterday for comparison
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().split('T')[0];
-
-    // Daily revenue
-    const dailyOrdersQuery = query(
-      collection(db, 'orders'),
-      where('orderDate', '==', todayStr),
-      where('status', 'in', ['confirmed', 'picking', 'packed', 'in_transit', 'delivered'])
-    );
-    const dailyOrdersSnap = await getDocs(dailyOrdersQuery);
-    const dailyRevenue = dailyOrdersSnap.docs.reduce((sum, doc) => sum + (doc.data().totalAmount || 0), 0);
-    const dailyOrders = dailyOrdersSnap.docs.length;
-
-    // Yesterday's revenue for comparison
-    const yesterdayOrdersQuery = query(
-      collection(db, 'orders'),
-      where('orderDate', '==', yesterdayStr),
-      where('status', 'in', ['confirmed', 'picking', 'packed', 'in_transit', 'delivered'])
-    );
-    const yesterdayOrdersSnap = await getDocs(yesterdayOrdersQuery);
-    const yesterdayRevenue = yesterdayOrdersSnap.docs.reduce((sum, doc) => sum + (doc.data().totalAmount || 0), 0);
-    const revenueChange = yesterdayRevenue > 0 ? ((dailyRevenue - yesterdayRevenue) / yesterdayRevenue) * 100 : 0;
-
-    // Monthly revenue
-    const monthlyOrdersQuery = query(
-      collection(db, 'orders'),
-      where('orderDate', '>=', startOfMonthStr),
-      where('orderDate', '<=', todayStr),
-      where('status', 'in', ['confirmed', 'picking', 'packed', 'in_transit', 'delivered'])
-    );
-    const monthlyOrdersSnap = await getDocs(monthlyOrdersQuery);
-    const monthlyRevenue = monthlyOrdersSnap.docs.reduce((sum, doc) => sum + (doc.data().totalAmount || 0), 0);
-    const monthlyOrders = monthlyOrdersSnap.docs.length;
-
-    // Active clients
-    const clientsQuery = query(
-      collection(db, 'clients'),
-      where('status', '==', 'active')
-    );
-    const clientsSnap = await getDocs(clientsQuery);
-    const activeClients = clientsSnap.docs.length;
-
-    // New clients this month
-    const newClientsQuery = query(
-      collection(db, 'clients'),
-      where('createdAt', '>=', startOfMonthDate.toISOString()),
-      where('status', '==', 'active')
-    );
-    const newClientsSnap = await getDocs(newClientsQuery);
-    const newClientsThisMonth = newClientsSnap.docs.length;
-
-    // Total receivables
-    const receivablesQuery = query(
-      collection(db, 'orders'),
-      where('paymentStatus', 'in', ['pending', 'partial']),
-      where('status', 'in', ['delivered', 'in_transit'])
-    );
-    const receivablesSnap = await getDocs(receivablesQuery);
-    const totalReceivables = receivablesSnap.docs.reduce((sum, doc) => {
-      const data = doc.data();
-      return sum + (data.totalAmount - (data.paidAmount || 0));
-    }, 0);
-
-    // Overdue receivables (orders delivered more than 14 days ago)
-    const fourteenDaysAgo = new Date();
-    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
-    const overdueReceivables = receivablesSnap.docs.reduce((sum, doc) => {
-      const data = doc.data();
-      const deliveredAt = data.deliveredAt ? new Date(data.deliveredAt) : null;
-      if (deliveredAt && deliveredAt < fourteenDaysAgo) {
-        return sum + (data.totalAmount - (data.paidAmount || 0));
+    let activeClients = 0;
+    let newClientsThisMonth = 0;
+    if (hasDjangoJwt()) {
+      try {
+        const clients = await djangoUsersApi.list('b2b');
+        activeClients = clients.filter((c) => c.is_active !== false).length;
+        newClientsThisMonth = activeClients;
+      } catch {
+        /* ignore */
       }
-      return sum;
-    }, 0);
-
-    // Low stock products
-    const inventoryQuery = query(
-      collection(db, 'inventory'),
-      where('status', '==', 'available')
-    );
-    const inventorySnap = await getDocs(inventoryQuery);
-    const productQuantities: Record<string, number> = {};
-    inventorySnap.docs.forEach((doc) => {
-      const data = doc.data();
-      productQuantities[data.productId] = (productQuantities[data.productId] || 0) + (data.quantity || 0);
-    });
-
-    // Get products with minStock
-    const productsQuery = query(collection(db, 'products'));
-    const productsSnap = await getDocs(productsQuery);
-    let lowStockProducts = 0;
-    productsSnap.docs.forEach((doc) => {
-      const data = doc.data();
-      const currentQty = productQuantities[doc.id] || 0;
-      if (currentQty < (data.minStock || 10)) {
-        lowStockProducts++;
-      }
-    });
-
-    // Expiring products (within 7 days)
-    const sevenDaysFromNow = new Date();
-    sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
-    const expiringQuery = query(
-      collection(db, 'inventory'),
-      where('expiryDate', '<=', sevenDaysFromNow.toISOString()),
-      where('status', '==', 'available')
-    );
-    const expiringSnap = await getDocs(expiringQuery);
-    const expiringProducts = expiringSnap.docs.length;
+    }
 
     return {
-      dailyRevenue,
-      weeklyRevenue: dailyRevenue * 7, // Simplified calculation
-      monthlyRevenue,
-      revenueChange,
-      dailyOrders,
-      weeklyOrders: dailyOrders * 7,
-      monthlyOrders,
-      ordersChange: 0, // Would need historical data
+      dailyRevenue: dailyOrders.reduce((s, o) => s + o.totalAmount, 0),
+      weeklyRevenue: weeklyOrders.reduce((s, o) => s + o.totalAmount, 0),
+      monthlyRevenue: monthlyOrders.reduce((s, o) => s + o.totalAmount, 0),
+      revenueChange: 0,
+      dailyOrders: dailyOrders.length,
+      weeklyOrders: weeklyOrders.length,
+      monthlyOrders: monthlyOrders.length,
+      ordersChange: 0,
       activeClients,
       newClientsThisMonth,
       clientsChange: 0,
-      totalReceivables,
-      overdueReceivables,
-      lowStockProducts,
-      expiringProducts,
+      totalReceivables: 0,
+      overdueReceivables: 0,
+      lowStockProducts: 0,
+      expiringProducts: 0,
     };
   } catch {
     return emptyDashboardStats();
   }
 }
 
-// Get sales chart data
 export async function getSalesChartData(days: number = 30): Promise<ChartData> {
-  const db = tryGetFirebaseDb();
-  if (!db) return emptySalesChartData(days);
-
+  const orders = (await loadOrders()).filter(isCountableOrder);
   const labels: string[] = [];
   const data: number[] = [];
-  
   const today = new Date();
-  
+
   for (let i = days - 1; i >= 0; i--) {
     const date = new Date(today);
     date.setDate(date.getDate() - i);
     const dateStr = date.toISOString().split('T')[0];
-    const label = date.toLocaleDateString('uz-UZ', { day: '2-digit', month: '2-digit' });
-    
-    labels.push(label);
-    
-    // Get orders for this date
-    const ordersQuery = query(
-      collection(db, 'orders'),
-      where('orderDate', '==', dateStr),
-      where('status', 'in', ['confirmed', 'picking', 'packed', 'in_transit', 'delivered'])
+    labels.push(date.toLocaleDateString('uz-UZ', { day: '2-digit', month: '2-digit' }));
+    data.push(
+      orders.filter((o) => o.orderDate === dateStr).reduce((s, o) => s + o.totalAmount, 0)
     );
-    const ordersSnap = await getDocs(ordersQuery);
-    const dailyTotal = ordersSnap.docs.reduce((sum, doc) => sum + (doc.data().totalAmount || 0), 0);
-    
-    data.push(dailyTotal);
   }
-  
+
   return {
     labels,
-    datasets: [{
-      label: 'Savdo (UZS)',
-      data,
-      color: '#4f46e5',
-    }],
+    datasets: [{ label: 'Savdo (UZS)', data, color: '#4f46e5' }],
   };
 }
 
-// Get top products
 export async function getTopProducts(limitCount: number = 10): Promise<{ name: string; sales: number; quantity: number }[]> {
-  const db = tryGetFirebaseDb();
-  if (!db) return [];
-
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  
-  const ordersQuery = query(
-    collection(db, 'orders'),
-    where('orderDate', '>=', thirtyDaysAgo.toISOString().split('T')[0]),
-    where('status', 'in', ['confirmed', 'picking', 'packed', 'in_transit', 'delivered'])
+  const orders = (await loadOrders()).filter(
+    (o) => isCountableOrder(o) && o.orderDate && new Date(o.orderDate) >= thirtyDaysAgo
   );
-  const ordersSnap = await getDocs(ordersQuery);
-  
+
   const productStats: Record<string, { name: string; sales: number; quantity: number }> = {};
-  
-  ordersSnap.docs.forEach(doc => {
-    const order = doc.data() as Order;
-    order.items?.forEach(item => {
+  orders.forEach((order) => {
+    order.items?.forEach((item) => {
       if (!productStats[item.productId]) {
-        productStats[item.productId] = {
-          name: item.productName,
-          sales: 0,
-          quantity: 0,
-        };
+        productStats[item.productId] = { name: item.productName, sales: 0, quantity: 0 };
       }
       productStats[item.productId].sales += item.totalPrice;
       productStats[item.productId].quantity += item.quantity;
     });
   });
-  
+
   return Object.values(productStats)
     .sort((a, b) => b.sales - a.sales)
     .slice(0, limitCount);
 }
 
-// Get top agents
 export async function getTopAgents(limitCount: number = 5): Promise<{ name: string; region: string; sales: number; orders: number }[]> {
-  const db = tryGetFirebaseDb();
-  if (!db) return [];
-
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  
-  const ordersQuery = query(
-    collection(db, 'orders'),
-    where('orderDate', '>=', thirtyDaysAgo.toISOString().split('T')[0]),
-    where('status', 'in', ['confirmed', 'picking', 'packed', 'in_transit', 'delivered']),
-    where('agentId', '!=', null)
+  const orders = (await loadOrders()).filter(
+    (o) =>
+      isCountableOrder(o) &&
+      o.agentId &&
+      o.orderDate &&
+      new Date(o.orderDate) >= thirtyDaysAgo
   );
-  const ordersSnap = await getDocs(ordersQuery);
-  
+
   const agentStats: Record<string, { name: string; region: string; sales: number; orders: number }> = {};
-  
-  ordersSnap.docs.forEach(doc => {
-    const order = doc.data() as Order;
-    if (order.agentId) {
-      if (!agentStats[order.agentId]) {
-        agentStats[order.agentId] = {
-          name: order.agentName || 'Noma\'lum',
-          region: '', // Would need to fetch from user data
-          sales: 0,
-          orders: 0,
-        };
-      }
-      agentStats[order.agentId].sales += order.totalAmount;
-      agentStats[order.agentId].orders += 1;
+  orders.forEach((order) => {
+    if (!order.agentId) return;
+    if (!agentStats[order.agentId]) {
+      agentStats[order.agentId] = {
+        name: order.agentName || 'Noma\'lum',
+        region: '',
+        sales: 0,
+        orders: 0,
+      };
     }
+    agentStats[order.agentId].sales += order.totalAmount;
+    agentStats[order.agentId].orders += 1;
   });
-  
+
   return Object.values(agentStats)
     .sort((a, b) => b.sales - a.sales)
     .slice(0, limitCount);
 }
 
-// Get recent orders
 export async function getRecentOrders(limitCount: number = 10): Promise<Order[]> {
-  const db = tryGetFirebaseDb();
-  if (!db) return [];
-
-  const ordersQuery = query(
-    collection(db, 'orders'),
-    orderBy('createdAt', 'desc'),
-    limit(limitCount)
-  );
-  const ordersSnap = await getDocs(ordersQuery);
-  return ordersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Order);
+  const orders = await loadOrders();
+  return orders
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, limitCount);
 }
 
-// Sales by region (mijozlar tahlili - qaysi hududda savdo yaxshi)
 export async function getSalesByRegion(): Promise<{ region: string; sales: number; orders: number; clients: number }[]> {
-  const db = tryGetFirebaseDb();
-  if (!db) return [];
-
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const dateStr = thirtyDaysAgo.toISOString().split('T')[0];
-
-  const [ordersSnap, clientsSnap] = await Promise.all([
-    getDocs(query(
-      collection(db, 'orders'),
-      where('orderDate', '>=', dateStr),
-      limit(500)
-    )),
-    getDocs(collection(db, 'clients')),
-  ]);
-
-  const validStatuses = ['confirmed', 'picking', 'packed', 'in_transit', 'delivered'];
-
-  const clientRegion: Record<string, string> = {};
-  clientsSnap.docs.forEach(d => {
-    const data = d.data();
-    clientRegion[d.id] = (data.region as string) || 'Noma\'lum';
-  });
+  const orders = (await loadOrders()).filter(
+    (o) => isCountableOrder(o) && o.orderDate && new Date(o.orderDate) >= thirtyDaysAgo
+  );
 
   const regionStats: Record<string, { sales: number; orders: number; clients: Set<string> }> = {};
-  ordersSnap.docs.forEach(doc => {
-    const o = doc.data() as Order;
-    if (!validStatuses.includes(o.status)) return;
-    const region = clientRegion[o.clientId] || 'Noma\'lum';
+  orders.forEach((o) => {
+    const region = o.notes?.split('\n')[0]?.trim() || 'Noma\'lum';
     if (!regionStats[region]) {
       regionStats[region] = { sales: 0, orders: 0, clients: new Set() };
     }
@@ -371,81 +208,36 @@ export async function getSalesByRegion(): Promise<{ region: string; sales: numbe
     .sort((a, b) => b.sales - a.sales);
 }
 
-// Get pending approvals count
 export async function getPendingApprovalsCount(): Promise<{
   clients: number;
   orders: number;
   expenses: number;
 }> {
-  const db = tryGetFirebaseDb();
-  if (!db) {
-    return { clients: 0, orders: 0, expenses: 0 };
+  let clients = 0;
+  if (hasDjangoJwt()) {
+    try {
+      const rows = await djangoUsersApi.list('b2b');
+      clients = rows.filter((c) => c.is_active === false).length;
+    } catch {
+      /* ignore */
+    }
   }
-
-  // Pending clients
-  const clientsQuery = query(
-    collection(db, 'clients'),
-    where('registrationStatus', '==', 'pending')
-  );
-  const clientsSnap = await getDocs(clientsQuery);
-  
-  // Pending orders
-  const ordersQuery = query(
-    collection(db, 'orders'),
-    where('status', '==', 'pending')
-  );
-  const ordersSnap = await getDocs(ordersQuery);
-  
-  // Pending expenses (would need expense approval workflow)
-  const expensesQuery = query(
-    collection(db, 'expenses'),
-    where('approvedBy', '==', null)
-  );
-  const expensesSnap = await getDocs(expensesQuery);
-  
-  return {
-    clients: clientsSnap.docs.length,
-    orders: ordersSnap.docs.length,
-    expenses: expensesSnap.docs.length,
-  };
+  const orders = (await loadOrders()).filter((o) => o.status === 'pending').length;
+  return { clients, orders, expenses: 0 };
 }
 
-/** P&L: berilgan davr uchun daromad, xarajat va toza foyda */
-export async function getPLSummary(
-  startDate: string,
-  endDate: string
-): Promise<{ revenue: number; expenses: number; profit: number }> {
-  const db = tryGetFirebaseDb();
-  if (!db) {
-    return { revenue: 0, expenses: 0, profit: 0 };
-  }
-
-  try {
-    const ordersQuery = query(
-      collection(db, 'orders'),
-      where('orderDate', '>=', startDate),
-      where('orderDate', '<=', endDate),
-      limit(1000)
-    );
-    const expensesQuery = query(
-      collection(db, 'expenses'),
-      where('date', '>=', startDate),
-      where('date', '<=', endDate),
-      limit(1000)
-    );
-    const [ordersSnap, expensesSnap] = await Promise.all([
-      getDocs(ordersQuery),
-      getDocs(expensesQuery),
-    ]);
-    const deliveredStatuses = ['delivered'];
-    const revenue = ordersSnap.docs.reduce((sum, d) => {
-      const data = d.data();
-      if (deliveredStatuses.includes(data.status)) return sum + (data.totalAmount || 0);
-      return sum;
-    }, 0);
-    const expenses = expensesSnap.docs.reduce((sum, d) => sum + (d.data().amount || 0), 0);
-    return { revenue, expenses, profit: revenue - expenses };
-  } catch {
-    return { revenue: 0, expenses: 0, profit: 0 };
-  }
+export async function getPLSummary(startDate: string, endDate: string): Promise<{
+  revenue: number;
+  expenses: number;
+  profit: number;
+}> {
+  const orders = (await loadOrders()).filter(
+    (o) =>
+      isCountableOrder(o) &&
+      o.orderDate &&
+      o.orderDate >= startDate &&
+      o.orderDate <= endDate
+  );
+  const revenue = orders.reduce((s, o) => s + o.totalAmount, 0);
+  return { revenue, expenses: 0, profit: revenue };
 }

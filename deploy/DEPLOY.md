@@ -285,6 +285,6 @@ python deploy/audit_production.py
 
 **400 `/admin/workspace`:** so‘rov Django API ga tushmasligi kerak — host nginx `location /` → `:18180`. `.env.saxar` da `DJANGO_ALLOWED_HOSTS` ichida `saxar.uz` bo‘lsin. `api.saxar.uz` uchun alohida cert bo‘lmasa — `api.saxar.uz.shared-with-saxar-cert.conf` (bootstrap avtomatik tanlaydi).
 
-## 11) Firebase (kirish xatolari `YOUR_WEB_API_KEY`)
+## 11) Autentifikatsiya (faqat Django)
 
-Repoda maxfiy kalit yo‘q. Serverda `/opt/saxar/firebase-applet-config.json` faylini Firebase konsoldan olingan haqiqiy JSON bilan yarating (`.gitignore` da), keyin `docker compose ... up -d --build web` — Dockerfile bu fayl bor bo‘lsa, misol konfigni **nusxalamaydi**.
+Firebase olib tashlangan. Kirish va barcha ma’lumotlar Django REST API + JWT orqali. Demo rollar: `deploy/ROLE_LOGINS.md`, serverda `python manage.py ensure_role_users`.

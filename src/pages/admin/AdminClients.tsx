@@ -4,18 +4,16 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
 import { Search, Plus, MapPin, Phone, Building2, CheckCircle2, AlertCircle, Loader2, XCircle, Download } from 'lucide-react';
-import { collection, getDocs, query, orderBy, limit, doc, updateDoc, getDoc } from 'firebase/firestore';
-import { tryGetFirebaseDb } from '../../firebase';
 import { useAuth } from '../../context/AuthContext';
 import { djangoUsersApi } from '../../services/platformApi';
 import { hasDjangoJwt } from '../../services/djangoAuth';
-import { logger } from '../../services/logger';
-import { clientService, userService, getClientBalance } from '../../services/firestore';
+import { getClientBalance } from '../../services/firestore';
 import { logAudit, AuditActions, EntityTypes } from '../../services/audit';
 import { useDebouncedValue } from '../../platform/useDebouncedValue';
 import { downloadCsv } from '../../platform/csv';
 import { addNotification } from '../../platform/notifications';
-import type { Client, User } from '../../types';
+import { djangoUserToClient, djangoUserIdFromClientId } from '../../utils/djangoUsers';
+import type { Client } from '../../types';
 
 const REGIONS = [
   'Toshkent shahri', 'Toshkent viloyati', 'Samarqand', 'Buxoro', 'Farg\u2019ona',
@@ -47,74 +45,47 @@ export default function AdminClients() {
     discountPercent: 0,
   });
 
-  const fetchClients = () => {
-    const db = tryGetFirebaseDb();
-    if (!db) {
+  const fetchClients = async () => {
+    if (!hasDjangoJwt()) {
       setClients([]);
       setBalances({});
       setLoading(false);
       return;
     }
-    const q = query(
-      collection(db, 'clients'),
-      orderBy('createdAt', 'desc'),
-      limit(200)
-    );
-    getDocs(q).then(snap => {
-      const list = snap.docs.map(d => ({ id: d.id, ...d.data() } as Client));
+    try {
+      const rows = await djangoUsersApi.list('b2b');
+      const list = rows.map(djangoUserToClient);
       setClients(list);
-      return list;
-    }).then(async list => {
       const bal: Record<string, number> = {};
-      await Promise.all(list.slice(0, 50).map(async c => {
-        bal[c.id] = await getClientBalance(c.id);
-      }));
+      await Promise.all(
+        list.slice(0, 50).map(async (c) => {
+          bal[c.id] = await getClientBalance(c.id);
+        })
+      );
       setBalances(bal);
-    }).finally(() => setLoading(false));
+    } catch {
+      setClients([]);
+      setBalances({});
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
     fetchClients();
   }, []);
 
-  const syncDjangoClientActive = async (firebaseUid: string, isActive: boolean) => {
-    const db = tryGetFirebaseDb();
-    if (!db || !hasDjangoJwt()) return;
-    try {
-      const userSnap = await getDoc(doc(db, 'users', firebaseUid));
-      const rawId = userSnap.data()?.djangoUserId;
-      const djangoId =
-        typeof rawId === 'number' ? rawId : rawId != null ? Number(rawId) : NaN;
-      if (Number.isFinite(djangoId) && djangoId > 0) {
-        await djangoUsersApi.patch(djangoId, { is_active: isActive });
-      }
-    } catch (e) {
-      logger.warn('Django mijoz holati yangilanmadi', {
-        detail: e instanceof Error ? e.message : String(e),
-      });
-    }
-  };
-
   const handleApprove = async (client: Client) => {
-    const db = tryGetFirebaseDb();
-    if (!db) return;
+    const djangoId = djangoUserIdFromClientId(client.id);
+    if (!djangoId || !hasDjangoJwt()) return;
     setActionLoading(client.id);
     try {
-      await updateDoc(doc(db, 'clients', client.id), {
-        registrationStatus: 'approved',
-        status: 'active',
-        updatedAt: new Date().toISOString(),
-      });
-      await updateDoc(doc(db, 'users', client.id), {
-        status: 'active',
-        updatedAt: new Date().toISOString(),
-      });
-      await syncDjangoClientActive(client.id, true);
+      await djangoUsersApi.patch(djangoId, { is_active: true });
       if (userData) {
         await logAudit(AuditActions.CLIENT_APPROVE, EntityTypes.CLIENT, client.id, userData.uid, userData.name || '', userData.role, { registrationStatus: 'pending' }, { registrationStatus: 'approved' });
       }
       setClients(prev => prev.map(c => c.id === client.id ? { ...c, registrationStatus: 'approved' as const, status: 'active' as const } : c));
-      addNotification('Tasdiqlandi', `${client.name} — Django va Firebase faollashtirildi.`);
+      addNotification('Tasdiqlandi', `${client.name} — Django da faollashtirildi.`);
     } catch (e) {
       console.error(e);
     } finally {
@@ -123,20 +94,11 @@ export default function AdminClients() {
   };
 
   const handleReject = async (client: Client) => {
-    const db = tryGetFirebaseDb();
-    if (!db) return;
+    const djangoId = djangoUserIdFromClientId(client.id);
+    if (!djangoId || !hasDjangoJwt()) return;
     setActionLoading(client.id);
     try {
-      await updateDoc(doc(db, 'clients', client.id), {
-        registrationStatus: 'rejected',
-        status: 'inactive',
-        updatedAt: new Date().toISOString(),
-      });
-      await updateDoc(doc(db, 'users', client.id), {
-        status: 'inactive',
-        updatedAt: new Date().toISOString(),
-      });
-      await syncDjangoClientActive(client.id, false);
+      await djangoUsersApi.patch(djangoId, { is_active: false });
       if (userData) {
         await logAudit(AuditActions.CLIENT_REJECT, EntityTypes.CLIENT, client.id, userData.uid, userData.name || '', userData.role, { registrationStatus: 'pending' }, { registrationStatus: 'rejected' });
       }
@@ -157,60 +119,19 @@ export default function AdminClients() {
       const email = `${digits || 'client'}@saxar.local`;
       const password = (clientForm.stir.trim() || `Saxar${digits.slice(-6) || '123456'}`).slice(0, 32);
 
-      let djangoId: number | undefined;
-      if (hasDjangoJwt()) {
-        const dj = await djangoUsersApi.create({
-          email,
-          phone,
-          role: 'b2b',
-          password,
-          first_name: clientForm.name.trim(),
-          is_active: true,
-        });
-        djangoId = dj.id;
+      if (!hasDjangoJwt()) {
+        addNotification('Xato', 'Django API bilan kiring (admin demo akkaunt).');
+        return;
       }
-
-      const fsId = djangoId ? `b2b_${djangoId}` : `client_${Date.now()}`;
-      const now = new Date().toISOString();
-
-      if (djangoId) {
-        await userService.create(
-          {
-            uid: fsId,
-            djangoUserId: djangoId,
-            email,
-            phone,
-            role: 'b2b',
-            name: clientForm.name.trim(),
-            companyName: clientForm.companyName.trim() || clientForm.name.trim(),
-            status: 'active',
-            createdAt: now,
-            updatedAt: now,
-          } as Omit<User, 'id'>,
-          fsId
-        );
-      }
-
-      await clientService.create(
-        {
-          name: clientForm.name.trim(),
-          ownerName: clientForm.ownerName.trim(),
-          phone,
-          stir: clientForm.stir.trim(),
-          companyName: clientForm.companyName.trim(),
-          address: clientForm.address.trim(),
-          region: clientForm.region,
-          paymentType: clientForm.paymentType,
-          creditLimit: clientForm.creditLimit,
-          creditDays: clientForm.creditDays,
-          discountPercent: clientForm.discountPercent,
-          status: 'active',
-          registrationStatus: 'approved',
-          currentBalance: 0,
-          totalPurchases: 0,
-        } as Omit<Client, 'id'>,
-        fsId
-      );
+      await djangoUsersApi.create({
+        email,
+        phone,
+        role: 'b2b',
+        password,
+        first_name: clientForm.name.trim(),
+        company_name: clientForm.companyName.trim() || clientForm.name.trim(),
+        is_active: true,
+      });
       setShowCreateModal(false);
       setClientForm({
         name: '', ownerName: '', phone: '', stir: '', companyName: '',

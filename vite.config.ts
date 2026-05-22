@@ -38,7 +38,6 @@ export default defineConfig(({mode}) => {
         output: {
           manualChunks(id: string) {
             if (id.includes('node_modules/recharts')) return 'vendor-recharts';
-            if (id.includes('node_modules/firebase')) return 'vendor-firebase';
           },
         },
       },

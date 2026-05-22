@@ -1,5 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
-import { where, type QueryConstraint } from 'firebase/firestore';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -7,10 +6,11 @@ import { Modal } from '../../components/ui/Modal';
 import { Users, MapPin, Target, TrendingUp, Loader2 } from 'lucide-react';
 import { addNotification } from '../../platform/notifications';
 import { openLiveMap } from '../../utils/featureActions';
-import { useFirestore } from '../../hooks/useFirestore';
-import { userService } from '../../services/firestore';
+import { djangoUsersApi } from '../../services/platformApi';
+import { hasDjangoJwt } from '../../services/djangoAuth';
 import { fetchAllOrdersMerged } from '../../utils/mergedData';
-import type { Client, Order, User } from '../../types';
+import { djangoRowToUser } from '../../utils/djangoUsers';
+import type { Order, User } from '../../types';
 
 const REGIONS = [
   'Toshkent shahri', 'Toshkent viloyati', 'Samarqand', 'Buxoro', 'Farg\u2019ona',
@@ -18,15 +18,32 @@ const REGIONS = [
   'Sirdaryo', 'Xorazm', 'Navoiy', 'Qoraqalpog\u2019iston',
 ];
 
-const AGENT_CONSTRAINTS: QueryConstraint[] = [where('role', '==', 'agent')];
-
 export default function AdminAgents() {
-  const { data: agentUsers, loading: agentsLoading, refresh: refreshAgents } = useFirestore<User>('users', AGENT_CONSTRAINTS);
-  const { data: allClients } = useFirestore<Client>('clients');
+  const [agentUsers, setAgentUsers] = useState<User[]>([]);
+  const [agentsLoading, setAgentsLoading] = useState(true);
   const [allOrders, setAllOrders] = useState<Order[]>([]);
-  useEffect(() => {
-    void fetchAllOrdersMerged().then(setAllOrders);
+
+  const refreshAgents = useCallback(async () => {
+    if (!hasDjangoJwt()) {
+      setAgentUsers([]);
+      setAgentsLoading(false);
+      return;
+    }
+    setAgentsLoading(true);
+    try {
+      const rows = await djangoUsersApi.list('agent');
+      setAgentUsers(rows.map(djangoRowToUser));
+    } catch {
+      setAgentUsers([]);
+    } finally {
+      setAgentsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void refreshAgents();
+    void fetchAllOrdersMerged().then(setAllOrders);
+  }, [refreshAgents]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
@@ -46,7 +63,7 @@ export default function AdminAgents() {
   const agents = useMemo(() => {
     return agentUsers.map((u) => {
       const uid = u.uid;
-      const shops = allClients.filter((c) => c.agentId === uid);
+      const shops = 0;
       const activeOrders = allOrders.filter(
         (o) => o.agentId === uid && !['delivered', 'cancelled', 'returned'].includes(o.status)
       ).length;
@@ -65,30 +82,34 @@ export default function AdminAgents() {
         region: u.region ?? '\u2014',
         plan: 0,
         fact,
-        shops: shops.length,
+        shops,
         active: activeOrders,
       };
     });
-  }, [agentUsers, allClients, allOrders, monthStart]);
+  }, [agentUsers, allOrders, monthStart]);
 
   const handleCreateAgent = async () => {
     if (!form.name.trim() || !form.phone.trim()) return;
+    if (!hasDjangoJwt()) {
+      addNotification('Xato', 'Django API bilan kiring.');
+      return;
+    }
     setSaving(true);
     try {
-      const uid = `agent_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      await userService.create({
-        uid,
-        email: form.email.trim() || `${form.phone.trim()}@saxar.uz`,
-        phone: form.phone.trim(),
+      const phone = form.phone.trim();
+      const email = form.email.trim() || `${phone.replace(/\D/g, '')}@saxar.local`;
+      await djangoUsersApi.create({
+        email,
+        phone,
         role: 'agent',
-        name: form.name.trim(),
-        status: 'active',
-        region: form.region,
-      } as Omit<User, 'id'>);
+        password: `Saxar${phone.replace(/\D/g, '').slice(-6) || '123456'}`,
+        first_name: form.name.trim(),
+        is_active: true,
+      });
       setShowCreateModal(false);
       setForm({ name: '', email: '', phone: '', region: '' });
-      addNotification('Agent yaratildi', `${form.name} muvaffaqiyatli saqlandi.`);
-      refreshAgents();
+      addNotification('Agent yaratildi', `${form.name} Django da saqlandi.`);
+      await refreshAgents();
     } catch (e) {
       console.error(e);
       addNotification('Xatolik', 'Agent yaratishda xatolik yuz berdi.');
@@ -113,7 +134,7 @@ export default function AdminAgents() {
 
       {agentsLoading && <p className="text-slate-500 text-sm">Yuklanmoqda...</p>}
       {!agentsLoading && agents.length === 0 && (
-        <p className="text-slate-500">Hozircha agent foydalanuvchilari yo&apos;q (Firestore `users`, role=agent).</p>
+        <p className="text-slate-500">Hozircha agent foydalanuvchilari yo&apos;q (Django API, role=agent).</p>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

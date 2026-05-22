@@ -4,11 +4,8 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Package, Building, Phone, FileText, ArrowLeft } from 'lucide-react';
-import { getFirebaseAuth, tryGetFirebaseDb, isFirebaseConfigured } from '../../firebase';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
-import { persistDemoUser } from '../../constants/branding';
 import { api, ApiError } from '../../services/api';
+import { persistUserSession, userFromDjangoProfile } from '../../services/sessionStore';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -58,122 +55,45 @@ export default function Register() {
     setLoading(true);
     setError('');
     try {
-      if (!isFirebaseConfigured()) {
-        const syntheticEmailFallback = makeSyntheticEmail(formData.phone);
-        persistDemoUser(
-          JSON.stringify({
-            uid: `demo_register_b2b_${formData.phone.replace(/\D/g, '').slice(-6) || 'user'}`,
-            email: syntheticEmailFallback,
-            phone: formData.phone.trim(),
-            role: 'b2b',
-            name: formData.companyName,
-            status: 'pending',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          })
-        );
-        window.location.href = '/b2b/profile';
-        return;
-      }
-
       const syntheticEmail = makeSyntheticEmail(formData.phone);
-      let djangoUserId: number | undefined;
-      try {
-        const dj = await api.post<{ id: number }>('/accounts/auth/register-b2b/', {
-          email: syntheticEmail,
-          password: pwd,
-          phone: formData.phone.trim(),
-          stir: stirDigits,
-          company_name: companyName,
-        });
-        djangoUserId = dj.id;
-        // JWT faqat admin tasdiqlagach (is_active=True) — hozir login rad etiladi
-      } catch (apiErr) {
-        if (!(apiErr instanceof ApiError && apiErr.statusCode === 400)) {
-          throw apiErr;
-        }
-        setError(apiErr.message || 'Bu telefon/email allaqachon ro‘yxatdan o‘tgan');
-        return;
-      }
-      const auth = getFirebaseAuth();
-      const result = await createUserWithEmailAndPassword(auth, syntheticEmail, pwd);
-      await updateProfile(result.user, { displayName: companyName });
-      const uid = result.user.uid;
-      const now = new Date().toISOString();
-      const db = tryGetFirebaseDb();
-      if (!db) {
-        setError('Firestore mavjud emas. Konfiguratsiyani tekshiring.');
-        return;
-      }
-      await setDoc(doc(db, 'users', uid), {
-        uid,
-        djangoUserId: djangoUserId ?? null,
+      const dj = await api.post<{
+        id: number;
+        email?: string;
+        phone?: string;
+        role?: string;
+        company_name?: string;
+        stir?: string;
+        is_active?: boolean;
+      }>('/accounts/auth/register-b2b/', {
         email: syntheticEmail,
-        phone: formData.phone.trim(),
-        role: 'b2b',
-        name: companyName,
-        status: 'pending',
-        stir: stirDigits,
-        companyName,
-        address: '',
-        createdAt: now,
-        updatedAt: now,
-      });
-      await setDoc(doc(db, 'clients', uid), {
-        id: uid,
-        name: companyName,
-        ownerName: companyName,
+        password: pwd,
         phone: formData.phone.trim(),
         stir: stirDigits,
-        companyName,
-        address: '',
-        region: '',
-        status: 'pending',
-        registrationStatus: 'pending',
-        discountPercent: 0,
-        paymentType: 'transfer',
-        creditLimit: 0,
-        creditDays: 0,
-        currentBalance: 0,
-        totalPurchases: 0,
-        createdAt: now,
-        updatedAt: now,
+        company_name: companyName,
       });
-      navigate('/b2b/profile', { state: { pendingApproval: true } });
-    } catch (err) {
-      const fbErr = err as { message?: string; code?: string };
-      const msg = String(fbErr?.message || '');
-      const isOpNotAllowed =
-        fbErr?.code === 'auth/operation-not-allowed' || msg.includes('operation-not-allowed');
-      const apiKeyBad =
-        fbErr?.code === 'auth/invalid-api-key' ||
-        (typeof fbErr?.code === 'string' && fbErr.code.includes('api-key')) ||
-        msg.toLowerCase().includes('api-key-not-valid') ||
-        msg.toLowerCase().includes('invalid-api-key');
 
-      if (isOpNotAllowed || apiKeyBad) {
-        const syntheticEmailFallback = makeSyntheticEmail(formData.phone);
-        persistDemoUser(
-          JSON.stringify({
-            uid: `demo_phone_b2b_${formData.phone.replace(/\D/g, '').slice(-6) || 'user'}`,
-            email: syntheticEmailFallback,
-            phone: formData.phone,
+      persistUserSession(
+        userFromDjangoProfile(
+          {
+            id: dj.id,
             role: 'b2b',
-            name: formData.companyName,
-            status: 'pending',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          })
-        );
-        window.location.href = '/b2b/profile';
-        return;
-      }
-
-      setError(
-        msg.includes('email-already-in-use')
-          ? "Bu telefon raqam allaqachon ro'yxatdan o'tgan"
-          : fbErr?.message || "Ro'yxatdan o'tishda xatolik"
+            is_active: false,
+            email: dj.email || syntheticEmail,
+            phone: dj.phone || formData.phone.trim(),
+            company_name: companyName,
+            stir: stirDigits,
+            first_name: companyName,
+          },
+          formData.phone.trim()
+        )
       );
+      navigate('/b2b/profile', { state: { pendingApproval: true } });
+    } catch (apiErr) {
+      if (apiErr instanceof ApiError) {
+        setError(apiErr.message || 'Ro‘yxatdan o‘tib bo‘lmadi');
+      } else {
+        setError(apiErr instanceof Error ? apiErr.message : "Ro'yxatdan o'tishda xatolik");
+      }
     } finally {
       setLoading(false);
     }

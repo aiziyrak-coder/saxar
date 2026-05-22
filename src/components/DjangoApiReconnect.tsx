@@ -19,7 +19,7 @@ interface DjangoApiReconnectProps {
 }
 
 /**
- * Firebase bilan kirilgan, lekin Django API tokeni yo‘q yoki muddati tugagan.
+ * Django JWT yo‘q yoki muddati tugagan.
  * Avval refresh token bilan tiklanadi; bo‘lmasa — parol kiritib JWT olinadi (chiqish shart emas).
  */
 export default function DjangoApiReconnect({
@@ -87,7 +87,7 @@ export default function DjangoApiReconnect({
   }
 
   const defaultDesc =
-    'Tizim ikki qadamda ishlaydi: Firebase (kirish) va Django REST API (mahsulotlar, buyurtmalar, moliya). Hozir Firebase sessiyasi bor, lekin API kaliti (JWT) yo‘q yoki muddati tugagan. Quyida login parolingizni qayta kiriting — chiqish shart emas.';
+    'Django REST API kaliti (JWT) yo‘q yoki muddati tugagan. Quyida login parolingizni qayta kiriting — chiqish shart emas.';
 
   return (
     <Card className="p-8 max-w-lg mx-auto">

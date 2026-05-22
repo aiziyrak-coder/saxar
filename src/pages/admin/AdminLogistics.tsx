@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { where, type QueryConstraint } from 'firebase/firestore';
+import { firestoreWhere as where, type FirestoreQueryConstraint as QueryConstraint } from '../../firebase';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';

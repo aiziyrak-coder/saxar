@@ -1,25 +1,7 @@
-import { tryGetFirebaseDb } from '../firebase';
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  addDoc,
-  setDoc,
-  updateDoc,
-  deleteDoc,
-  query,
-  where,
-  orderBy,
-  limit,
-  startAfter,
-  writeBatch,
-  runTransaction,
-  type Firestore,
-  type QueryConstraint,
-  type DocumentData,
-  type QueryDocumentSnapshot,
-} from 'firebase/firestore';
+/**
+ * Firestore olib tashlangan — CRUD stub.
+ * Ma’lumotlar Django REST API orqali (orderApi, djangoUsersApi, mergedData, va h.k.).
+ */
 import type {
   User,
   Product,
@@ -38,112 +20,37 @@ import type {
   PayrollItem,
 } from '../types';
 
-// ==================== GENERIC CRUD ====================
+export class FirestoreService<T extends { id?: string }> {
+  constructor(_collectionName: string) {}
 
-export class FirestoreService<T extends DocumentData> {
-  constructor(private collectionName: string) {}
-
-  private collectionRef(db: Firestore) {
-    return collection(db, this.collectionName);
+  async create(_data: Omit<T, 'id'>, _customId?: string): Promise<string | null> {
+    return null;
   }
 
-  private docRef(db: Firestore, id: string) {
-    return doc(db, this.collectionName, id);
+  async getById(_id: string): Promise<T | null> {
+    return null;
   }
 
-  // Create
-  async create(data: Omit<T, 'id'>, customId?: string): Promise<string | null> {
-    const db = tryGetFirebaseDb();
-    if (!db) return null;
-    const timestamp = new Date().toISOString();
-    const dataWithTimestamps = {
-      ...data,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    };
-
-    if (customId) {
-      await setDoc(this.docRef(db, customId), dataWithTimestamps, { merge: true });
-      return customId;
-    } else {
-      const docRef = await addDoc(this.collectionRef(db), dataWithTimestamps);
-      return docRef.id;
-    }
+  async getAll(_constraints?: unknown[]): Promise<T[]> {
+    return [];
   }
 
-  // Read
-  async getById(id: string): Promise<T | null> {
-    const db = tryGetFirebaseDb();
-    if (!db) return null;
-    const docSnap = await getDoc(this.docRef(db, id));
-    if (!docSnap.exists()) return null;
-    return { id: docSnap.id, ...docSnap.data() } as unknown as T;
+  async update(_id: string, _data: Partial<T>): Promise<boolean> {
+    return false;
   }
 
-  // Update
-  async update(id: string, data: Partial<T>): Promise<void> {
-    const db = tryGetFirebaseDb();
-    if (!db) return;
-    const updateData = {
-      ...data,
-      updatedAt: new Date().toISOString(),
-    };
-    await updateDoc(this.docRef(db, id), updateData);
+  async delete(_id: string): Promise<boolean> {
+    return false;
   }
 
-  // Delete
-  async delete(id: string): Promise<void> {
-    const db = tryGetFirebaseDb();
-    if (!db) return;
-    await deleteDoc(this.docRef(db, id));
-  }
-
-  // Query
-  async query(constraints: QueryConstraint[]): Promise<T[]> {
-    const db = tryGetFirebaseDb();
-    if (!db) return [];
-    const q = query(this.collectionRef(db), ...constraints);
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as unknown as T);
-  }
-
-  // Get all
-  async getAll(orderByField: string = 'createdAt', direction: 'asc' | 'desc' = 'desc'): Promise<T[]> {
-    const db = tryGetFirebaseDb();
-    if (!db) return [];
-    const q = query(this.collectionRef(db), orderBy(orderByField, direction));
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as unknown as T);
-  }
-
-  // Paginated query
-  async getPaginated(
-    pageSize: number,
-    lastDoc: QueryDocumentSnapshot<DocumentData> | null = null,
-    orderByField: string = 'createdAt',
-    direction: 'asc' | 'desc' = 'desc'
-  ): Promise<{ items: T[]; lastDoc: QueryDocumentSnapshot<DocumentData> | null }> {
-    const db = tryGetFirebaseDb();
-    if (!db) {
-      return { items: [], lastDoc: null };
-    }
-    const constraints: QueryConstraint[] = [orderBy(orderByField, direction), limit(pageSize)];
-    
-    if (lastDoc) {
-      constraints.push(startAfter(lastDoc));
-    }
-
-    const q = query(this.collectionRef(db), ...constraints);
-    const querySnapshot = await getDocs(q);
-    
-    const items = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as unknown as T);
-    const newLastDoc = querySnapshot.docs[querySnapshot.docs.length - 1] || null;
-
-    return { items, lastDoc: newLastDoc };
+  subscribe(
+    _callback: (data: T[]) => void,
+    _constraints?: unknown[]
+  ): () => void {
+    _callback([]);
+    return () => {};
   }
 }
-
-// ==================== SERVICE INSTANCES ====================
 
 export const userService = new FirestoreService<User>('users');
 export const productService = new FirestoreService<Product>('products');
@@ -151,7 +58,9 @@ export const categoryService = new FirestoreService<Category>('categories');
 export const clientService = new FirestoreService<Client>('clients');
 export const orderService = new FirestoreService<Order>('orders');
 export const inventoryService = new FirestoreService<InventoryItem>('inventory');
-export const inventoryTransactionService = new FirestoreService<InventoryTransaction>('inventory_transactions');
+export const inventoryTransactionService = new FirestoreService<InventoryTransaction>(
+  'inventory_transactions'
+);
 export const paymentService = new FirestoreService<Payment>('payments');
 export const expenseService = new FirestoreService<Expense>('expenses');
 export const deliveryService = new FirestoreService<Delivery>('deliveries');
@@ -161,352 +70,115 @@ export const agentCheckInService = new FirestoreService<AgentCheckIn>('agent_che
 export const promotionService = new FirestoreService<Promotion>('promotions');
 export const payrollService = new FirestoreService<PayrollItem>('payroll_items');
 
-// ==================== BATCH OPERATIONS ====================
-
-export async function runBatch<T extends DocumentData>(
-  operations: { type: 'create' | 'update' | 'delete'; collection: string; id?: string; data?: T }[]
-): Promise<void> {
-  const db = tryGetFirebaseDb();
-  if (!db || operations.length === 0) return;
-  const batch = writeBatch(db);
-
-  for (const op of operations) {
-    const collectionRef = collection(db, op.collection);
-    
-    switch (op.type) {
-      case 'create':
-        if (op.id) {
-          batch.set(doc(collectionRef, op.id), { ...op.data, createdAt: new Date().toISOString() });
-        } else {
-          const newDocRef = doc(collectionRef);
-          batch.set(newDocRef, { ...op.data, createdAt: new Date().toISOString() });
-        }
-        break;
-      case 'update':
-        if (op.id) {
-          batch.update(doc(collectionRef, op.id), { ...op.data, updatedAt: new Date().toISOString() });
-        }
-        break;
-      case 'delete':
-        if (op.id) {
-          batch.delete(doc(collectionRef, op.id));
-        }
-        break;
-    }
-  }
-
-  await batch.commit();
-}
-
-// ==================== SPECIALIZED QUERIES ====================
-
-// Get clients by agent (agentga biriktirilgan do'konlar)
-export async function getClientsByAgentId(agentId: string): Promise<Client[]> {
-  const db = tryGetFirebaseDb();
-  if (!db) return [];
-  const q = query(
-    collection(db, 'clients'),
-    where('agentId', '==', agentId),
-    limit(500)
-  );
-  const snapshot = await getDocs(q);
-  const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() }) as Client);
-  list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-  return list;
-}
-
-// Get orders by client
-export async function getOrdersByClient(clientId: string, limitCount: number = 50): Promise<Order[]> {
-  const db = tryGetFirebaseDb();
-  if (!db) return [];
-  const q = query(
-    collection(db, 'orders'),
-    where('clientId', '==', clientId),
-    limit(limitCount * 2)
-  );
-  const snapshot = await getDocs(q);
-  const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Order);
-  list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  return list.slice(0, limitCount);
-}
-
-// Get orders by status
-export async function getOrdersByStatus(status: string, limitCount: number = 100): Promise<Order[]> {
-  const db = tryGetFirebaseDb();
-  if (!db) return [];
-  const q = query(
-    collection(db, 'orders'),
-    where('status', '==', status),
-    orderBy('createdAt', 'desc'),
-    limit(limitCount)
-  );
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Order);
-}
-
-// Get orders by multiple statuses (in-memory filter to avoid composite index)
-export async function getOrdersByStatuses(statuses: string[], limitCount: number = 100): Promise<Order[]> {
-  const db = tryGetFirebaseDb();
-  if (!db) return [];
-  const q = query(
-    collection(db, 'orders'),
-    orderBy('createdAt', 'desc'),
-    limit(limitCount * 2)
-  );
-  const snapshot = await getDocs(q);
-  const set = new Set(statuses);
-  return snapshot.docs
-    .map(doc => ({ id: doc.id, ...doc.data() }) as Order)
-    .filter(o => set.has(o.status))
-    .slice(0, limitCount);
-}
-
-// Get inventory by product
-export async function getInventoryByProduct(productId: string): Promise<InventoryItem[]> {
-  const db = tryGetFirebaseDb();
-  if (!db) return [];
-  const q = query(
-    collection(db, 'inventory'),
-    where('productId', '==', productId),
-    where('status', '==', 'available'),
-    orderBy('expiryDate', 'asc')
-  );
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as InventoryItem);
-}
-
-// Get expiring inventory
-export async function getExpiringInventory(days: number = 7): Promise<InventoryItem[]> {
-  const db = tryGetFirebaseDb();
-  if (!db) return [];
-  const expiryDate = new Date();
-  expiryDate.setDate(expiryDate.getDate() + days);
-  
-  const q = query(
-    collection(db, 'inventory'),
-    where('expiryDate', '<=', expiryDate.toISOString()),
-    where('status', '==', 'available'),
-    orderBy('expiryDate', 'asc')
-  );
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as InventoryItem);
-}
-
-// Get low stock products
-export async function getLowStockProducts(): Promise<InventoryItem[]> {
-  const db = tryGetFirebaseDb();
-  if (!db) return [];
-  // This requires aggregation query
-  const q = query(
-    collection(db, 'inventory'),
-    where('status', '==', 'available')
-  );
-  const snapshot = await getDocs(q);
-  
-  // Group by product and sum quantities
-  const productQuantities: Record<string, { item: InventoryItem; totalQty: number }> = {};
-  
-  snapshot.docs.forEach(doc => {
-    const item = doc.data() as InventoryItem;
-    if (!productQuantities[item.productId]) {
-      productQuantities[item.productId] = { item, totalQty: 0 };
-    }
-    productQuantities[item.productId].totalQty += item.quantity;
-  });
-  
-  // Filter low stock (would need product.minStock for proper check)
-  return Object.values(productQuantities)
-    .filter(p => p.totalQty < 10) // Default threshold
-    .map(p => p.item);
-}
-
-// Get payments by client (for Akt sverka / history)
-export async function getPaymentsByClient(clientId: string, limitCount: number = 50): Promise<Payment[]> {
-  const db = tryGetFirebaseDb();
-  if (!db) return [];
-  const q = query(
-    collection(db, 'payments'),
-    where('clientId', '==', clientId),
-    limit(limitCount * 2)
-  );
-  const snapshot = await getDocs(q);
-  const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Payment));
-  list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  return list.slice(0, limitCount);
-}
-
-// Get client balance (orders total - payments total)
-export async function getClientBalance(clientId: string): Promise<number> {
-  const db = tryGetFirebaseDb();
-  if (!db) return 0;
-  // Get all orders for client
-  const ordersQuery = query(
-    collection(db, 'orders'),
-    where('clientId', '==', clientId)
-  );
-  const ordersSnap = await getDocs(ordersQuery);
-  const totalOrders = ordersSnap.docs.reduce((sum, doc) => sum + (doc.data().totalAmount || 0), 0);
-
-  // Get all payments for client
-  const paymentsQuery = query(
-    collection(db, 'payments'),
-    where('clientId', '==', clientId),
-    where('direction', '==', 'in')
-  );
-  const paymentsSnap = await getDocs(paymentsQuery);
-  const totalPayments = paymentsSnap.docs.reduce((sum, doc) => sum + (doc.data().amount || 0), 0);
-
-  return totalOrders - totalPayments;
-}
-
-// Get KPI by agent and period
-export async function getKPIByAgentAndPeriod(agentId: string, period: string): Promise<KPIRecord | null> {
-  const db = tryGetFirebaseDb();
-  if (!db) return null;
-  const q = query(
-    collection(db, 'kpi_records'),
-    where('agentId', '==', agentId),
-    where('period', '==', period),
-    limit(1)
-  );
-  const snapshot = await getDocs(q);
-  if (snapshot.empty) return null;
-  return { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as KPIRecord;
-}
-
-/** Mahsulot bo‘yicha FIFO qoldig‘i yetarliligini tekshiradi (yozuvsiz). */
-export async function checkFifoAvailability(
-  productId: string,
-  quantity: number
+export async function runBatch<T extends Record<string, unknown>>(
+  _operations: Array<{ type: 'create' | 'update' | 'delete'; collection: string; id?: string; data?: Partial<T> }>
 ): Promise<boolean> {
-  const batches = await getInventoryByProduct(productId);
-  const available = batches.reduce((sum, b) => sum + (b.quantity || 0), 0);
-  return available >= quantity;
+  return false;
 }
 
-/** FIFO chiqim: tranzaksiya ichida — race condition va qisman yozuvlardan himoya. */
+export async function getClientsByAgentId(_agentId: string): Promise<Client[]> {
+  return [];
+}
+
+export async function getOrdersByClient(
+  clientId: string,
+  _limitCount: number = 50
+): Promise<Order[]> {
+  const { fetchClientOrdersMerged } = await import('../utils/mergedData');
+  const { djangoUserIdFromClientId } = await import('../utils/djangoUsers');
+  const djangoId = djangoUserIdFromClientId(clientId);
+  if (!djangoId) return [];
+  return fetchClientOrdersMerged(clientId, djangoId);
+}
+
+export async function getOrdersByStatus(_status: string, _limitCount: number = 100): Promise<Order[]> {
+  return [];
+}
+
+export async function getOrdersByStatuses(_statuses: string[], _limitCount: number = 100): Promise<Order[]> {
+  return [];
+}
+
+export async function getInventoryByProduct(_productId: string): Promise<InventoryItem[]> {
+  return [];
+}
+
+export async function getExpiringInventory(_days: number = 7): Promise<InventoryItem[]> {
+  return [];
+}
+
+export async function getLowStockProducts(): Promise<InventoryItem[]> {
+  return [];
+}
+
+export async function getPaymentsByClient(
+  clientId: string,
+  _limitCount: number = 50
+): Promise<Payment[]> {
+  const { fetchPaymentsMerged } = await import('../utils/mergedData');
+  const { djangoUserIdFromClientId } = await import('../utils/djangoUsers');
+  const djangoId = djangoUserIdFromClientId(clientId);
+  return fetchPaymentsMerged(clientId, djangoId ?? undefined);
+}
+
+export async function getClientBalance(clientId: string): Promise<number> {
+  const orders = await getOrdersByClient(clientId);
+  const payments = await getPaymentsByClient(clientId);
+  const ordered = orders
+    .filter((o) => !['cancelled', 'returned'].includes(o.status))
+    .reduce((s, o) => s + o.totalAmount, 0);
+  const paid = payments.reduce((s, p) => s + p.amount, 0);
+  return ordered - paid;
+}
+
+export async function getKPIByAgentAndPeriod(
+  _agentId: string,
+  _period: string
+): Promise<KPIRecord | null> {
+  return null;
+}
+
+export async function checkFifoAvailability(
+  _productId: string,
+  quantity: number
+): Promise<{ available: boolean; shortage: number }> {
+  return { available: false, shortage: quantity };
+}
+
 export async function deductFIFO(
-  productId: string,
-  productName: string,
-  _sku: string,
-  _unit: string,
-  quantity: number,
-  orderId: string,
-  orderNumber: string,
-  createdBy: string,
-  createdByName: string
+  _productId: string,
+  _productName: string,
+  _skuOrQuantity: string | number,
+  _unitOrOrderId?: string | number,
+  quantityOrOrderNumber?: number | string,
+  _orderId?: string,
+  _orderNumber?: string,
+  _createdBy?: string,
+  _createdByName?: string
 ): Promise<{ success: boolean; shortage?: number }> {
-  const db = tryGetFirebaseDb();
-  if (!db) {
-    return { success: false, shortage: quantity };
-  }
-
-  const invQuery = query(
-    collection(db, 'inventory'),
-    where('productId', '==', productId),
-    where('status', '==', 'available'),
-    orderBy('expiryDate', 'asc')
-  );
-  const initialSnap = await getDocs(invQuery);
-  if (initialSnap.empty) {
-    return { success: false, shortage: quantity };
-  }
-
-  try {
-    return await runTransaction(db, async (transaction) => {
-      const freshSnaps = await Promise.all(
-        initialSnap.docs.map((d) => transaction.get(d.ref))
-      );
-      const batches = freshSnaps
-        .filter((snap) => snap.exists())
-        .map((snap) => ({ id: snap.id, ...snap.data() }) as InventoryItem)
-        .sort((a, b) => (a.expiryDate || '').localeCompare(b.expiryDate || ''));
-      let remaining = quantity;
-      const plan: { item: InventoryItem; take: number; newQty: number }[] = [];
-
-      for (const item of batches) {
-        if (remaining <= 0) break;
-        const take = Math.min(item.quantity, remaining);
-        if (take <= 0) continue;
-        remaining -= take;
-        plan.push({ item, take, newQty: item.quantity - take });
-      }
-
-      if (remaining > 0) {
-        return { success: false as const, shortage: remaining };
-      }
-
-      const now = new Date().toISOString();
-      for (const { item, take, newQty } of plan) {
-        transaction.update(doc(db, 'inventory', item.id), {
-          quantity: newQty,
-          updatedAt: now,
-        });
-        const txRef = doc(collection(db, 'inventory_transactions'));
-        const txData: Omit<InventoryTransaction, 'id'> = {
-          type: 'out',
-          productId,
-          productName,
-          batchNumber: item.batchNumber,
-          quantity: take,
-          unit: item.unit,
-          orderId,
-          referenceNumber: orderNumber,
-          createdBy,
-          createdByName,
-          createdAt: now,
-        };
-        transaction.set(txRef, txData);
-      }
-      return { success: true as const };
-    });
-  } catch {
-    return { success: false, shortage: quantity };
-  }
+  const qty =
+    typeof _skuOrQuantity === 'number'
+      ? _skuOrQuantity
+      : typeof quantityOrOrderNumber === 'number'
+        ? quantityOrOrderNumber
+        : 0;
+  return { success: false, shortage: qty };
 }
 
-/** Inventarizatsiya: mahsulot bo‘yicha qoldiqni tuzatish (bitta batch dan chiqarish yoki qo‘shish). */
 export async function inventoryAdjustment(
-  productId: string,
-  productName: string,
+  _productId: string,
+  _productName: string,
   _sku: string,
   _unit: string,
-  batchId: string,
-  batchNumber: string,
-  currentQty: number,
-  newQty: number,
-  reason: string,
-  createdBy: string,
-  createdByName: string
-): Promise<void> {
-  const db = tryGetFirebaseDb();
-  if (!db) return;
-  const diff = newQty - currentQty;
-  if (diff === 0) return;
-  const now = new Date().toISOString();
-  const batch = writeBatch(db);
-  batch.update(doc(db, 'inventory', batchId), {
-    quantity: newQty,
-    updatedAt: now,
-  });
-  const txData: Omit<InventoryTransaction, 'id'> = {
-    type: 'adjustment',
-    productId,
-    productName,
-    batchNumber,
-    quantity: diff,
-    unit: _unit,
-    notes: reason,
-    createdBy,
-    createdByName,
-    createdAt: now,
-  };
-  const txRef = doc(collection(db, 'inventory_transactions'));
-  batch.set(txRef, txData);
-  await batch.commit();
-}
+  _batchId: string,
+  _batchNumber: string,
+  _currentQty: number,
+  _newQty: number,
+  _reason: string,
+  _createdBy: string,
+  _createdByName: string
+): Promise<void> {}
 
-// Generate order number
 export function generateOrderNumber(): string {
   const now = new Date();
   const year = now.getFullYear().toString().slice(-2);
@@ -516,7 +188,6 @@ export function generateOrderNumber(): string {
   return `ORD-${year}${month}${day}-${random}`;
 }
 
-// Generate batch number
 export function generateBatchNumber(productId: string): string {
   const now = new Date();
   const year = now.getFullYear().toString().slice(-2);

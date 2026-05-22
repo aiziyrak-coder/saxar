@@ -7,8 +7,6 @@ import { useCart } from '../../hooks/useCart';
 import { useAuth } from '../../context/AuthContext';
 import { logAudit, AuditActions, EntityTypes } from '../../services/audit';
 import { Modal } from '../../components/ui/Modal';
-import { doc, getDoc } from 'firebase/firestore';
-import { tryGetFirebaseDb } from '../../firebase';
 import { logger } from '../../services/logger';
 import { addNotification } from '../../platform/notifications';
 import { submitB2BOrder } from '../../utils/b2bOrderSubmit';
@@ -24,13 +22,8 @@ export default function B2BCart() {
   const [clientAddress, setClientAddress] = useState('');
 
   useEffect(() => {
-    if (!user?.uid) return;
-    const db = tryGetFirebaseDb();
-    if (!db) return;
-    getDoc(doc(db, 'clients', user.uid)).then((snap) => {
-      if (snap.exists()) setClientAddress(snap.data().address || '');
-    }).catch(() => {});
-  }, [user?.uid]);
+    setClientAddress(userData?.address || '');
+  }, [userData?.address]);
 
   const handleCheckout = async () => {
     if (!user || !userData || items.length === 0) return;

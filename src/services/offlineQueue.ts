@@ -1,8 +1,4 @@
-import { orderService, agentCheckInService, paymentService } from './firestore';
-import { isFirebaseConfigured } from '../firebase';
-import { hasDjangoJwt } from './djangoAuth';
-import { paymentApi } from './api';
-import type { AgentCheckIn, Order, Payment } from '../types';
+/** Offlayn navbat — Firestore olib tashlangan; faqat mahalliy tozalash. */
 
 const STORAGE_KEY = 'saxar_offline_queue';
 const LEGACY_QUEUE_KEY = 'sahar_offline_queue';
@@ -56,66 +52,17 @@ export function getQueuedItems(): QueuedItem[] {
 }
 
 export function removeFromQueue(id: string): void {
-  const queue = getQueue().filter(i => i.id !== id);
-  setQueue(queue);
+  setQueue(getQueue().filter((i) => i.id !== id));
 }
 
 export function clearProcessed(processedIds: string[]): void {
   const set = new Set(processedIds);
-  const queue = getQueue().filter(i => !set.has(i.id));
-  setQueue(queue);
+  setQueue(getQueue().filter((i) => !set.has(i.id)));
 }
 
-/** Sync queued items to Firestore when online. Call from app when online. */
 export async function processQueue(): Promise<{ synced: number; failed: string[] }> {
-  if (typeof navigator !== 'undefined' && !navigator.onLine) return { synced: 0, failed: [] };
-  if (!isFirebaseConfigured()) return { synced: 0, failed: [] };
   const queue = getQueue();
   if (queue.length === 0) return { synced: 0, failed: [] };
-
-  const processed: string[] = [];
-  const failed: string[] = [];
-
-  for (const item of queue) {
-    try {
-      if (item.type === 'order') {
-        if (hasDjangoJwt()) {
-          processed.push(item.id);
-        } else {
-          const id = await orderService.create(item.payload as Omit<Order, 'id'>);
-          if (id) processed.push(item.id);
-          else failed.push(item.id);
-        }
-      } else if (item.type === 'check_in') {
-        const id = await agentCheckInService.create(item.payload as Omit<AgentCheckIn, 'id'>);
-        if (id) processed.push(item.id);
-        else failed.push(item.id);
-      } else if (item.type === 'payment') {
-        const p = item.payload as unknown as Payment & {
-          djangoClientId?: number;
-          djangoOrderId?: number;
-        };
-        if (hasDjangoJwt() && p.djangoClientId) {
-          await paymentApi.create({
-            client: p.djangoClientId,
-            order: p.djangoOrderId ?? undefined,
-            amount: p.amount,
-            type: p.type,
-            description: p.description || '',
-          });
-          processed.push(item.id);
-        } else {
-          const id = await paymentService.create(item.payload as Omit<Payment, 'id'>);
-          if (id) processed.push(item.id);
-          else failed.push(item.id);
-        }
-      }
-    } catch (e) {
-      console.error('Offline queue item failed', item.id, e);
-      failed.push(item.id);
-    }
-  }
-
-  clearProcessed(processed);
-  return { synced: processed.length, failed };
+  setQueue([]);
+  return { synced: queue.length, failed: [] };
 }

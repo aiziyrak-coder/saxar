@@ -3,9 +3,11 @@ import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { FileText, Search } from 'lucide-react';
-import { where, orderBy, limit } from 'firebase/firestore';
 import type { Client } from '../../types';
-import { clientService, getClientBalance } from '../../services/firestore';
+import { getClientBalance } from '../../services/firestore';
+import { djangoUsersApi } from '../../services/platformApi';
+import { hasDjangoJwt } from '../../services/djangoAuth';
+import { djangoUserToClient } from '../../utils/djangoUsers';
 
 export default function AccountantAktSverka() {
   const [clients, setClients] = useState<Client[]>([]);
@@ -17,12 +19,17 @@ export default function AccountantAktSverka() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      if (!hasDjangoJwt()) {
+        if (!cancelled) setClients([]);
+        if (!cancelled) setLoading(false);
+        return;
+      }
       try {
-        const list = await clientService.query([
-          where('status', '==', 'active'),
-          orderBy('name'),
-          limit(200),
-        ]);
+        const rows = await djangoUsersApi.list('b2b');
+        const list = rows
+          .filter((r) => r.is_active !== false)
+          .map(djangoUserToClient)
+          .sort((a, b) => a.name.localeCompare(b.name));
         if (!cancelled) setClients(list);
       } catch {
         if (!cancelled) setClients([]);
